@@ -62,16 +62,21 @@ OpenAPI spec is available at `http://localhost:8080/api/rest/openapi.json` when 
 
 ## Emitted Events
 
-Other Elements can subscribe to the following typed events via `element.subscribe(...)`:
+Other Elements can subscribe to Stripe events using `@ElementEventConsumer` with the name constants from `StripeEvents` (in the `api` module):
 
-| Event record | Emitted when | Fields |
-|---|---|---|
-| `StripePaymentSucceededEvent` | `payment_intent.succeeded` webhook | `paymentIntentId`, `amount`, `currency` |
-| `StripePaymentFailedEvent` | `payment_intent.payment_failed` webhook | `paymentIntentId`, `failureMessage` |
-| `StripeSubscriptionCreatedEvent` | `customer.subscription.created` webhook | `subscriptionId`, `customerId`, `status` |
-| `StripeSubscriptionCancelledEvent` | `customer.subscription.deleted` webhook | `subscriptionId`, `customerId` |
+```java
+@ElementEventConsumer(StripeEvents.PAYMENT_SUCCEEDED)
+public void onPaymentSucceeded() { ... }
+```
 
-All event records are in the `dev.getelements.elements.stripe.event` package (shipped in the `api` module).
+| Constant | Value | Emitted when | Arguments |
+|---|---|---|---|
+| `StripeEvents.PAYMENT_SUCCEEDED` | `payment_intent.succeeded` | PaymentIntent succeeded | `paymentIntentId`, `amount`, `currency` |
+| `StripeEvents.PAYMENT_FAILED` | `payment_intent.payment_failed` | PaymentIntent failed | `paymentIntentId`, `failureMessage` |
+| `StripeEvents.SUBSCRIPTION_CREATED` | `customer.subscription.created` | Subscription created | `subscriptionId`, `customerId`, `status` |
+| `StripeEvents.SUBSCRIPTION_CANCELLED` | `customer.subscription.deleted` | Subscription cancelled | `subscriptionId`, `customerId` |
+
+No dependency on the event record classes is required — event dispatch is by name.
 
 ---
 
