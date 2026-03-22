@@ -6,7 +6,9 @@ import com.stripe.model.Subscription;
 import com.stripe.net.Webhook;
 import dev.getelements.elements.sdk.Element;
 import dev.getelements.elements.sdk.ElementSupplier;
+import dev.getelements.elements.sdk.annotation.ElementEventProducer;
 import dev.getelements.elements.stripe.StripeApplication;
+import dev.getelements.elements.stripe.StripeEvents;
 import dev.getelements.elements.stripe.event.StripePaymentFailedEvent;
 import dev.getelements.elements.stripe.event.StripePaymentSucceededEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCancelledEvent;
@@ -25,18 +27,34 @@ import static dev.getelements.elements.stripe.StripeApplication.OPENAPI_TAG;
 
 @Tag(name = OPENAPI_TAG)
 @Path("/stripe/webhook")
+@ElementEventProducer(
+        value = StripeEvents.PAYMENT_SUCCEEDED,
+        description = "Published when a Stripe payment_intent.succeeded webhook is received.")
+@ElementEventProducer(
+        value = StripeEvents.PAYMENT_FAILED,
+        description = "Published when a Stripe payment_intent.payment_failed webhook is received.")
+@ElementEventProducer(
+        value = StripeEvents.SUBSCRIPTION_CREATED,
+        description = "Published when a Stripe customer.subscription.created webhook is received.")
+@ElementEventProducer(
+        value = StripeEvents.SUBSCRIPTION_CANCELLED,
+        description = "Published when a Stripe customer.subscription.deleted webhook is received.")
 public class StripeWebhookEndpoint {
 
     private final Element element;
+    private final String webhookSecret;
 
     /** Used by the JAX-RS container at runtime. */
     public StripeWebhookEndpoint() {
-        this(ElementSupplier.getElementLocal(StripeWebhookEndpoint.class).get());
+        final var el = ElementSupplier.getElementLocal(StripeWebhookEndpoint.class).get();
+        this.element = el;
+        this.webhookSecret = el.getServiceLocator().getInstance(String.class, StripeApplication.STRIPE_WEBHOOK_SECRET);
     }
 
-    /** Package-private — used by unit tests to supply a mock Element. */
-    StripeWebhookEndpoint(Element element) {
+    /** Package-private — used by unit tests to supply a mock Element and secret. */
+    StripeWebhookEndpoint(Element element, String webhookSecret) {
         this.element = element;
+        this.webhookSecret = webhookSecret;
     }
 
     @POST
@@ -50,13 +68,10 @@ public class StripeWebhookEndpoint {
             String payload,
             @HeaderParam("Stripe-Signature") String sigHeader) {
 
-        final var secret = (String) element.getElementRecord().attributes()
-                .getAttribute(StripeApplication.STRIPE_WEBHOOK_SECRET);
-
         final Event event;
 
         try {
-            event = Webhook.constructEvent(payload, sigHeader, secret);
+            event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
         } catch (SignatureVerificationException e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("{\"error\":\"Invalid signature\"}")
@@ -65,7 +80,7 @@ public class StripeWebhookEndpoint {
 
         switch (event.getType()) {
 
-            case StripePaymentSucceededEvent.NAME -> {
+            case StripeEvents.PAYMENT_SUCCEEDED -> {
 
                 final var pi = (com.stripe.model.PaymentIntent)
                         event.getDataObjectDeserializer().getObject().orElseThrow();
@@ -77,7 +92,7 @@ public class StripeWebhookEndpoint {
                 ));
             }
 
-            case StripePaymentFailedEvent.NAME -> {
+            case StripeEvents.PAYMENT_FAILED -> {
 
                 final var pi = (com.stripe.model.PaymentIntent)
                         event.getDataObjectDeserializer().getObject().orElseThrow();
@@ -89,7 +104,7 @@ public class StripeWebhookEndpoint {
                 element.publish(new StripePaymentFailedEvent(pi.getId(), failureMessage));
             }
 
-            case StripeSubscriptionCreatedEvent.NAME -> {
+            case StripeEvents.SUBSCRIPTION_CREATED -> {
 
                 final var sub = (Subscription)
                         event.getDataObjectDeserializer().getObject().orElseThrow();
@@ -101,7 +116,7 @@ public class StripeWebhookEndpoint {
                 ));
             }
 
-            case StripeSubscriptionCancelledEvent.NAME -> {
+            case StripeEvents.SUBSCRIPTION_CANCELLED -> {
 
                 final var sub = (Subscription)
                         event.getDataObjectDeserializer().getObject().orElseThrow();

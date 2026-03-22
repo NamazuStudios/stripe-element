@@ -6,18 +6,14 @@ import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Subscription;
 import com.stripe.param.PaymentIntentCreateParams;
-import dev.getelements.elements.sdk.ElementSupplier;
 import dev.getelements.elements.stripe.StripeApplication;
+import jakarta.inject.Named;
 
 public class DefaultStripeGateway implements StripeGateway {
 
     @Inject
-    DefaultStripeGateway() {
-
-        final var element = ElementSupplier.getElementLocal(DefaultStripeGateway.class).get();
-
-        Stripe.apiKey = (String) element.getElementRecord().attributes()
-                .getAttribute(StripeApplication.STRIPE_API_KEY);
+    DefaultStripeGateway(@Named(StripeApplication.STRIPE_API_KEY) String apiKey) {
+        Stripe.apiKey = apiKey;
     }
 
     @Override

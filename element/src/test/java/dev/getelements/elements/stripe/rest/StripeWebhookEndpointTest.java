@@ -1,9 +1,6 @@
 package dev.getelements.elements.stripe.rest;
 
-import dev.getelements.elements.sdk.Attributes;
 import dev.getelements.elements.sdk.Element;
-import dev.getelements.elements.sdk.record.ElementRecord;
-import dev.getelements.elements.stripe.StripeApplication;
 import dev.getelements.elements.stripe.event.StripePaymentFailedEvent;
 import dev.getelements.elements.stripe.event.StripePaymentSucceededEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCancelledEvent;
@@ -31,22 +28,11 @@ class StripeWebhookEndpointTest {
     @Mock
     private Element element;
 
-    @Mock
-    private ElementRecord record;
-
-    @Mock
-    private Attributes attributes;
-
     private StripeWebhookEndpoint endpoint;
 
     @BeforeEach
     void setUp() {
-
-        when(element.getElementRecord()).thenReturn(record);
-        when(record.attributes()).thenReturn(attributes);
-        when(attributes.getAttribute(StripeApplication.STRIPE_WEBHOOK_SECRET)).thenReturn(TEST_SECRET);
-
-        endpoint = new StripeWebhookEndpoint(element);
+        endpoint = new StripeWebhookEndpoint(element, TEST_SECRET);
     }
 
     // --- signature verification ---

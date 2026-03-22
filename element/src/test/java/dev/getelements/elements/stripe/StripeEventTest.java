@@ -15,7 +15,7 @@ class StripeEventTest {
     @Test
     void paymentSucceeded_name() {
         final var event = new StripePaymentSucceededEvent("pi_001", 1000L, "usd");
-        assertEquals(StripePaymentSucceededEvent.NAME, event.getEventName());
+        assertEquals(StripeEvents.PAYMENT_SUCCEEDED, event.getEventName());
         assertFalse(event.isSystemEvent());
     }
 
@@ -28,7 +28,7 @@ class StripeEventTest {
     @Test
     void paymentFailed_name() {
         final var event = new StripePaymentFailedEvent("pi_002", "card declined");
-        assertEquals(StripePaymentFailedEvent.NAME, event.getEventName());
+        assertEquals(StripeEvents.PAYMENT_FAILED, event.getEventName());
         assertFalse(event.isSystemEvent());
     }
 
@@ -41,7 +41,7 @@ class StripeEventTest {
     @Test
     void subscriptionCreated_name() {
         final var event = new StripeSubscriptionCreatedEvent("sub_001", "cus_001", "active");
-        assertEquals(StripeSubscriptionCreatedEvent.NAME, event.getEventName());
+        assertEquals(StripeEvents.SUBSCRIPTION_CREATED, event.getEventName());
         assertFalse(event.isSystemEvent());
     }
 
@@ -54,7 +54,7 @@ class StripeEventTest {
     @Test
     void subscriptionCancelled_name() {
         final var event = new StripeSubscriptionCancelledEvent("sub_002", "cus_002");
-        assertEquals(StripeSubscriptionCancelledEvent.NAME, event.getEventName());
+        assertEquals(StripeEvents.SUBSCRIPTION_CANCELLED, event.getEventName());
         assertFalse(event.isSystemEvent());
     }
 
