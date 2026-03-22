@@ -62,11 +62,28 @@ OpenAPI spec is available at `http://localhost:8080/api/rest/openapi.json` when 
 
 ## Emitted Events
 
-Other Elements can subscribe to Stripe events using `@ElementEventConsumer` with the name constants from `StripeEvents` (in the `api` module):
+Other Elements can subscribe to Stripe events using `@ElementEventConsumer` with the name constants from `StripeEvents` (in the `api` module). Annotate a method on any Guice-managed service:
 
 ```java
-@ElementEventConsumer(StripeEvents.PAYMENT_SUCCEEDED)
-public void onPaymentSucceeded() { ... }
+import com.google.inject.Inject;
+import dev.getelements.elements.sdk.annotation.ElementEventConsumer;
+import dev.getelements.elements.stripe.StripeEvents;
+
+public class EntitlementService {
+
+    @Inject
+    private UserInventoryDao userInventoryDao;
+
+    @ElementEventConsumer(StripeEvents.PAYMENT_SUCCEEDED)
+    public void onPaymentSucceeded() {
+        // called whenever a payment_intent.succeeded webhook is received
+    }
+
+    @ElementEventConsumer(StripeEvents.SUBSCRIPTION_CANCELLED)
+    public void onSubscriptionCancelled() {
+        // revoke access, notify player, etc.
+    }
+}
 ```
 
 | Constant | Value | Emitted when | Arguments |
@@ -75,8 +92,6 @@ public void onPaymentSucceeded() { ... }
 | `StripeEvents.PAYMENT_FAILED` | `payment_intent.payment_failed` | PaymentIntent failed | `paymentIntentId`, `failureMessage` |
 | `StripeEvents.SUBSCRIPTION_CREATED` | `customer.subscription.created` | Subscription created | `subscriptionId`, `customerId`, `status` |
 | `StripeEvents.SUBSCRIPTION_CANCELLED` | `customer.subscription.deleted` | Subscription cancelled | `subscriptionId`, `customerId` |
-
-No dependency on the event record classes is required — event dispatch is by name.
 
 ---
 
