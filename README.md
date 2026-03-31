@@ -95,6 +95,27 @@ public class EntitlementService {
 
 ---
 
+## Stripe Dashboard Setup
+
+### Webhook configuration
+
+In the Stripe Dashboard, navigate to **Developers → Webhooks → Add endpoint**.
+
+- **Use the "Account" webhook type** (not "Event destinations / v2"). The v2 event destination format uses thin payloads and a different signing scheme that is incompatible with this Element.
+- Set the endpoint URL to your deployed base URL plus the webhook path:
+  ```
+  https://your-host/element/stripe/api/stripe/webhook
+  ```
+- Subscribe to exactly these four events (others are silently ignored, but subscribing only to what you need is cleaner):
+  - `payment_intent.succeeded`
+  - `payment_intent.payment_failed`
+  - `customer.subscription.created`
+  - `customer.subscription.deleted`
+
+After saving, Stripe shows a **Signing secret** (`whsec_...`). Copy this value into the `dev.getelements.elements.stripe.webhook.secret` attribute.
+
+---
+
 ## Testing Webhooks Locally
 
 Forward Stripe events to your local instance using the [Stripe CLI](https://stripe.com/docs/stripe-cli):
