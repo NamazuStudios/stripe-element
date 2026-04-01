@@ -1,0 +1,11 @@
+{
+  "schema": "1",
+  "entries": [
+    {
+      "label": "Stripe",
+      "icon": "CreditCard",
+      "bundlePath": "plugin.bundle.js",
+      "route": "stripe-config"
+    }
+  ]
+}

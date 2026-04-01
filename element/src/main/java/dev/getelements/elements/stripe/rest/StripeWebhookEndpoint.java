@@ -13,6 +13,8 @@ import dev.getelements.elements.stripe.event.StripePaymentFailedEvent;
 import dev.getelements.elements.stripe.event.StripePaymentSucceededEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCancelledEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCreatedEvent;
+import dev.getelements.elements.stripe.model.StripeConfig;
+import dev.getelements.elements.stripe.service.StripeConfigService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.ws.rs.Consumes;
@@ -42,19 +44,25 @@ import static dev.getelements.elements.stripe.StripeApplication.OPENAPI_TAG;
 public class StripeWebhookEndpoint {
 
     private final Element element;
-    private final String webhookSecret;
+    private final StripeConfigService configService;
 
     /** Used by the JAX-RS container at runtime. */
     public StripeWebhookEndpoint() {
         final var el = ElementSupplier.getElementLocal(StripeWebhookEndpoint.class).get();
         this.element = el;
-        this.webhookSecret = el.getServiceLocator().getInstance(String.class, StripeApplication.STRIPE_WEBHOOK_SECRET);
+        this.configService = el.getServiceLocator().getInstance(StripeConfigService.class);
     }
 
-    /** Package-private — used by unit tests to supply a mock Element and secret. */
+    /**
+     * Package-private — used by unit tests to supply a mock Element and a fixed secret
+     * without going through the service locator.
+     */
     StripeWebhookEndpoint(Element element, String webhookSecret) {
         this.element = element;
-        this.webhookSecret = webhookSecret;
+        this.configService = new StripeConfigService() {
+            @Override public StripeConfig getConfig() { return new StripeConfig("", webhookSecret); }
+            @Override public void saveConfig(StripeConfig c) {}
+        };
     }
 
     @POST
@@ -68,10 +76,18 @@ public class StripeWebhookEndpoint {
             String payload,
             @HeaderParam("Stripe-Signature") String sigHeader) {
 
+        final var secret = configService.getConfig().webhookSecret();
+
+        if (secret == null || secret.isBlank()) {
+            return Response.status(503)
+                    .entity("{\"error\":\"Webhook secret not configured\"}")
+                    .build();
+        }
+
         final Event event;
 
         try {
-            event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
+            event = Webhook.constructEvent(payload, sigHeader, secret);
         } catch (SignatureVerificationException e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity("{\"error\":\"Invalid signature\"}")

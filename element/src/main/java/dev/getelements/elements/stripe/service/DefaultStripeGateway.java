@@ -1,29 +1,41 @@
 package dev.getelements.elements.stripe.service;
 
 import com.google.inject.Inject;
-import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Subscription;
+import com.stripe.net.RequestOptions;
 import com.stripe.param.PaymentIntentCreateParams;
-import dev.getelements.elements.stripe.StripeApplication;
-import jakarta.inject.Named;
+import jakarta.ws.rs.InternalServerErrorException;
 
 public class DefaultStripeGateway implements StripeGateway {
 
+    private final StripeConfigService configService;
+
     @Inject
-    DefaultStripeGateway(@Named(StripeApplication.STRIPE_API_KEY) String apiKey) {
-        Stripe.apiKey = apiKey;
+    private DefaultStripeGateway(StripeConfigService configService) {
+        this.configService = configService;
     }
 
     @Override
     public PaymentIntent createPaymentIntent(PaymentIntentCreateParams params) throws StripeException {
-        return PaymentIntent.create(params);
+        return PaymentIntent.create(params, options());
     }
 
     @Override
     public Subscription retrieveSubscription(String subscriptionId) throws StripeException {
-        return Subscription.retrieve(subscriptionId);
+        return Subscription.retrieve(subscriptionId, options());
+    }
+
+    private RequestOptions options() {
+
+        final var apiKey = configService.getConfig().apiKey();
+
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new InternalServerErrorException("Stripe API key not configured");
+        }
+
+        return RequestOptions.builder().setApiKey(apiKey).build();
     }
 
 }

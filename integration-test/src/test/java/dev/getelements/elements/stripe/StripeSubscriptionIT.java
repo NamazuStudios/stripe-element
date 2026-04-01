@@ -85,7 +85,7 @@ public class StripeSubscriptionIT {
     @Test
     void getSubscriptionStatus_returnsStatus() {
 
-        final var service = new StripeServiceImpl(new LiveStripeGateway());
+        final var service = new StripeServiceImpl(new LiveStripeGateway(), null, null);
         final var response = service.getSubscriptionStatus(subscriptionId);
 
         assertNotNull(response.subscriptionId());
@@ -96,7 +96,7 @@ public class StripeSubscriptionIT {
     void getSubscriptionStatus_matchesDirectRetrieve() throws StripeException {
 
         final var direct = Subscription.retrieve(subscriptionId);
-        final var service = new StripeServiceImpl(new LiveStripeGateway());
+        final var service = new StripeServiceImpl(new LiveStripeGateway(), null, null);
         final var response = service.getSubscriptionStatus(subscriptionId);
 
         assertEquals(direct.getStatus(), response.status());

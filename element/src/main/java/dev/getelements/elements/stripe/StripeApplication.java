@@ -3,6 +3,7 @@ package dev.getelements.elements.stripe;
 import dev.getelements.elements.sdk.annotation.ElementDefaultAttribute;
 import dev.getelements.elements.sdk.annotation.ElementServiceExport;
 import dev.getelements.elements.sdk.annotation.ElementServiceImplementation;
+import dev.getelements.elements.stripe.rest.StripeConfigEndpoint;
 import dev.getelements.elements.stripe.rest.StripePaymentEndpoint;
 import dev.getelements.elements.stripe.rest.StripeWebhookEndpoint;
 import jakarta.ws.rs.core.Application;
@@ -32,6 +33,7 @@ public class StripeApplication extends Application {
         return Set.of(
                 StripeWebhookEndpoint.class,
                 StripePaymentEndpoint.class,
+                StripeConfigEndpoint.class,
                 StripeOpenAPIConfig.class
         );
     }

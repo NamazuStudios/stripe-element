@@ -3,8 +3,12 @@ package dev.getelements.elements.stripe.service;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Subscription;
+import dev.getelements.elements.sdk.dao.Transaction;
+import dev.getelements.elements.sdk.model.user.User;
+import dev.getelements.elements.sdk.service.user.UserService;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
+import jakarta.inject.Provider;
 import jakarta.ws.rs.InternalServerErrorException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,11 +26,23 @@ class StripeServiceImplTest {
     @Mock
     private StripeGateway gateway;
 
+    @Mock
+    private UserService userService;
+
+    @Mock
+    private Provider<Transaction> transactionProvider;
+
+    @Mock
+    private Transaction transaction;
+
     private StripeServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new StripeServiceImpl(gateway);
+        service = new StripeServiceImpl(gateway, userService, transactionProvider);
+        lenient().when(userService.getCurrentUser()).thenReturn(mock(User.class));
+        lenient().when(transactionProvider.get()).thenReturn(transaction);
+        lenient().doAnswer(inv -> null).when(transaction).performAndCloseV(any());
     }
 
     @Test

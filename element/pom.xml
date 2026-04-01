@@ -76,6 +76,23 @@
             <groupId>com.stripe</groupId>
             <artifactId>stripe-java</artifactId>
         </dependency>
+
+        <!-- MongoDB configuration service — provided by the platform at runtime -->
+        <dependency>
+            <groupId>dev.getelements.elements</groupId>
+            <artifactId>sdk-mongo</artifactId>
+        </dependency>
+        <!--
+            MongoDB Java driver — bundled inside the .elm (compile scope) so the element's
+            own URLClassLoader can find MongoClient without depending on the platform's
+            Morphia classloader. Version must match the platform's driver to share the
+            same wire protocol, but the classes themselves are element-local.
+        -->
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>mongodb-driver-sync</artifactId>
+            <version>4.10.2</version>
+        </dependency>
         <!-- Test dependencies -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -152,7 +169,7 @@
                         </goals>
                         <configuration>
                             <outputDirectory>${elm.element.dir}/lib</outputDirectory>
-                            <excludeScope>provided</excludeScope>
+                            <includeScope>runtime</includeScope>
                             <prependGroupId>true</prependGroupId>
                         </configuration>
                     </execution>
