@@ -2,6 +2,8 @@ package dev.getelements.elements.stripe.rest;
 
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
+import com.stripe.model.Invoice;
+import com.stripe.model.PaymentIntent;
 import com.stripe.model.Subscription;
 import com.stripe.net.Webhook;
 import dev.getelements.elements.sdk.Element;
@@ -15,6 +17,7 @@ import dev.getelements.elements.stripe.event.StripeSubscriptionCancelledEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCreatedEvent;
 import dev.getelements.elements.stripe.model.StripeConfig;
 import dev.getelements.elements.stripe.service.StripeConfigService;
+import dev.getelements.elements.stripe.service.StripeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.ws.rs.Consumes;
@@ -36,6 +39,9 @@ import static dev.getelements.elements.stripe.StripeApplication.OPENAPI_TAG;
         value = StripeEvents.PAYMENT_FAILED,
         description = "Published when a Stripe payment_intent.payment_failed webhook is received.")
 @ElementEventProducer(
+        value = StripeEvents.INVOICE_PAYMENT_SUCCEEDED,
+        description = "Published when a Stripe invoice.payment_succeeded webhook is received.")
+@ElementEventProducer(
         value = StripeEvents.SUBSCRIPTION_CREATED,
         description = "Published when a Stripe customer.subscription.created webhook is received.")
 @ElementEventProducer(
@@ -45,24 +51,27 @@ public class StripeWebhookEndpoint {
 
     private final Element element;
     private final StripeConfigService configService;
+    private final StripeService stripeService;
 
     /** Used by the JAX-RS container at runtime. */
     public StripeWebhookEndpoint() {
         final var el = ElementSupplier.getElementLocal(StripeWebhookEndpoint.class).get();
         this.element = el;
-        this.configService = el.getServiceLocator().getInstance(StripeConfigService.class);
+        final var locator = el.getServiceLocator();
+        this.configService = locator.getInstance(StripeConfigService.class);
+        this.stripeService = locator.getInstance(StripeService.class);
     }
 
     /**
-     * Package-private — used by unit tests to supply a mock Element and a fixed secret
-     * without going through the service locator.
+     * Package-private — used by unit tests to supply dependencies without the service locator.
      */
-    StripeWebhookEndpoint(Element element, String webhookSecret) {
+    StripeWebhookEndpoint(Element element, String webhookSecret, StripeService stripeService) {
         this.element = element;
         this.configService = new StripeConfigService() {
             @Override public StripeConfig getConfig() { return new StripeConfig("", webhookSecret); }
             @Override public void saveConfig(StripeConfig c) {}
         };
+        this.stripeService = stripeService;
     }
 
     @POST
@@ -98,7 +107,7 @@ public class StripeWebhookEndpoint {
 
             case StripeEvents.PAYMENT_SUCCEEDED -> {
 
-                final var pi = (com.stripe.model.PaymentIntent)
+                final var pi = (PaymentIntent)
                         event.getDataObjectDeserializer().getObject().orElseThrow();
 
                 element.publish(new StripePaymentSucceededEvent(
@@ -106,11 +115,25 @@ public class StripeWebhookEndpoint {
                         pi.getAmount(),
                         pi.getCurrency()
                 ));
+
+                final var piMeta = pi.getMetadata();
+                stripeService.recordPaymentReceipt(pi.getId(), pi.getAmount(), pi.getCurrency(),
+                        piMeta != null ? piMeta.get(StripeService.METADATA_USER_ID) : null);
+            }
+
+            case StripeEvents.INVOICE_PAYMENT_SUCCEEDED -> {
+
+                final var invoice = (Invoice)
+                        event.getDataObjectDeserializer().getObject().orElseThrow();
+
+                final var invMeta = invoice.getMetadata();
+                stripeService.recordPaymentReceipt(invoice.getPaymentIntent(), invoice.getAmountPaid(),
+                        invoice.getCurrency(), invMeta != null ? invMeta.get(StripeService.METADATA_USER_ID) : null);
             }
 
             case StripeEvents.PAYMENT_FAILED -> {
 
-                final var pi = (com.stripe.model.PaymentIntent)
+                final var pi = (PaymentIntent)
                         event.getDataObjectDeserializer().getObject().orElseThrow();
 
                 final var failureMessage = pi.getLastPaymentError() != null

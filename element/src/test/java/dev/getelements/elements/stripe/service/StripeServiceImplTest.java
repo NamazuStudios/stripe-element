@@ -3,7 +3,9 @@ package dev.getelements.elements.stripe.service;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.Subscription;
+import dev.getelements.elements.sdk.dao.ReceiptDao;
 import dev.getelements.elements.sdk.dao.Transaction;
+import dev.getelements.elements.sdk.model.receipt.Receipt;
 import dev.getelements.elements.sdk.model.user.User;
 import dev.getelements.elements.sdk.service.user.UserService;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
@@ -13,6 +15,7 @@ import jakarta.ws.rs.InternalServerErrorException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -35,14 +38,22 @@ class StripeServiceImplTest {
     @Mock
     private Transaction transaction;
 
+    @Mock
+    private ReceiptDao receiptDao;
+
     private StripeServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new StripeServiceImpl(gateway, userService, transactionProvider);
-        lenient().when(userService.getCurrentUser()).thenReturn(mock(User.class));
+        final var user = mock(User.class);
+        lenient().when(user.getId()).thenReturn("user_test_001");
+        lenient().when(userService.getCurrentUser()).thenReturn(user);
         lenient().when(transactionProvider.get()).thenReturn(transaction);
-        lenient().doAnswer(inv -> null).when(transaction).performAndCloseV(any());
+        // By default, performAndCloseV invokes its Consumer so DAO calls are exercised.
+        lenient().doAnswer(inv -> { inv.getArgument(0, java.util.function.Consumer.class).accept(transaction); return null; })
+                .when(transaction).performAndCloseV(any());
+        lenient().when(transaction.getDao(ReceiptDao.class)).thenReturn(receiptDao);
     }
 
     @Test
@@ -125,6 +136,60 @@ class StripeServiceImplTest {
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.getSubscriptionStatus("sub_missing"));
+    }
+
+    // --- createPaymentIntent metadata ---
+
+    @Test
+    void createPaymentIntent_includesUserIdInMetadata() throws StripeException {
+
+        when(gateway.createPaymentIntent(any())).thenReturn(mock(PaymentIntent.class));
+
+        service.createPaymentIntent(new CreatePaymentIntentRequest(1000L, "usd", null));
+
+        verify(gateway).createPaymentIntent(argThat(p ->
+                "user_test_001".equals(p.getMetadata().get(StripeService.METADATA_USER_ID))
+        ));
+    }
+
+    // --- recordPaymentReceipt ---
+
+    @Test
+    void recordPaymentReceipt_withUserId_savesReceiptToDao() {
+
+        final var lookedUpUser = mock(User.class);
+        when(userService.getUser("user_001")).thenReturn(lookedUpUser);
+
+        service.recordPaymentReceipt("pi_receipt_001", 3000L, "gbp", "user_001");
+
+        final var captor = ArgumentCaptor.forClass(Receipt.class);
+        verify(receiptDao).createReceipt(captor.capture());
+
+        final var receipt = captor.getValue();
+        assertEquals("pi_receipt_001", receipt.getOriginalTransactionId());
+        assertEquals("stripe", receipt.getSchema());
+        assertEquals(lookedUpUser, receipt.getUser());
+        assertNotNull(receipt.getBody());
+        assertTrue(receipt.getBody().contains("3000"));
+        assertTrue(receipt.getBody().contains("gbp"));
+    }
+
+    @Test
+    void recordPaymentReceipt_nullUserId_skipsDao() {
+
+        service.recordPaymentReceipt("pi_skip_001", 1000L, "usd", null);
+
+        verifyNoInteractions(receiptDao);
+        verify(userService, never()).getUser(any());
+    }
+
+    @Test
+    void recordPaymentReceipt_blankUserId_skipsDao() {
+
+        service.recordPaymentReceipt("pi_skip_002", 1000L, "usd", "  ");
+
+        verifyNoInteractions(receiptDao);
+        verify(userService, never()).getUser(any());
     }
 
 }

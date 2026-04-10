@@ -69,6 +69,12 @@
             <artifactId>jakarta.ws.rs-api</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.glassfish.jersey.core</groupId>
+            <artifactId>jersey-server</artifactId>
+            <version>3.1.9</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

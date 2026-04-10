@@ -5,6 +5,7 @@ import dev.getelements.elements.stripe.event.StripePaymentFailedEvent;
 import dev.getelements.elements.stripe.event.StripePaymentSucceededEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCancelledEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCreatedEvent;
+import dev.getelements.elements.stripe.service.StripeService;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,11 +29,14 @@ class StripeWebhookEndpointTest {
     @Mock
     private Element element;
 
+    @Mock
+    private StripeService stripeService;
+
     private StripeWebhookEndpoint endpoint;
 
     @BeforeEach
     void setUp() {
-        endpoint = new StripeWebhookEndpoint(element, TEST_SECRET);
+        endpoint = new StripeWebhookEndpoint(element, TEST_SECRET, stripeService);
     }
 
     // --- signature verification ---
@@ -56,7 +60,8 @@ class StripeWebhookEndpointTest {
                  "created":1234567890,"livemode":false,
                  "type":"payment_intent.succeeded",
                  "data":{"object":{"id":"pi_001","object":"payment_intent",
-                 "amount":2500,"currency":"eur","status":"succeeded"}}}""";
+                 "amount":2500,"currency":"eur","status":"succeeded",
+                 "metadata":{"userId":"user_abc"}}}}""";
 
         endpoint.receiveWebhook(payload, sig(payload));
 
@@ -67,6 +72,38 @@ class StripeWebhookEndpointTest {
         assertEquals("pi_001", captor.getValue().paymentIntentId());
         assertEquals(2500L, captor.getValue().amount());
         assertEquals("eur", captor.getValue().currency());
+        verify(stripeService).recordPaymentReceipt("pi_001", 2500L, "eur", "user_abc");
+    }
+
+    @Test
+    void paymentIntentSucceeded_noUserId_skipsReceipt() throws Exception {
+
+        final String payload = """
+                {"id":"evt_1b","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"payment_intent.succeeded",
+                 "data":{"object":{"id":"pi_002","object":"payment_intent",
+                 "amount":1000,"currency":"usd","status":"succeeded"}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        verify(stripeService).recordPaymentReceipt("pi_002", 1000L, "usd", null);
+    }
+
+    @Test
+    void invoicePaymentSucceeded_savesReceipt() throws Exception {
+
+        final String payload = """
+                {"id":"evt_inv_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"invoice.payment_succeeded",
+                 "data":{"object":{"id":"in_001","object":"invoice",
+                 "payment_intent":"pi_inv_001","amount_paid":999,"currency":"usd",
+                 "metadata":{"userId":"user_xyz"}}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        verify(stripeService).recordPaymentReceipt("pi_inv_001", 999L, "usd", "user_xyz");
     }
 
     @Test

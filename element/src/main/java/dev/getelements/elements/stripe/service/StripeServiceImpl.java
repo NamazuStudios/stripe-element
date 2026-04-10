@@ -42,31 +42,16 @@ public class StripeServiceImpl implements StripeService {
                     .setAmount(request.amount())
                     .setCurrency(request.currency())
                     .setCustomer(request.customerId())
+                    .putMetadata(StripeService.METADATA_USER_ID, userService.getCurrentUser().getId())
                     .build();
 
             final var intent = gateway.createPaymentIntent(params);
-
-            saveReceipt(intent.getId(), request);
 
             return new CreatePaymentIntentResponse(intent.getId(), intent.getClientSecret());
 
         } catch (StripeException e) {
             throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
         }
-    }
-
-    private void saveReceipt(String paymentIntentId, CreatePaymentIntentRequest request) {
-        final var receipt = new Receipt();
-        receipt.setOriginalTransactionId(paymentIntentId);
-        receipt.setSchema(RECEIPT_SCHEMA);
-        receipt.setUser(userService.getCurrentUser());
-        receipt.setPurchaseTime(System.currentTimeMillis());
-        receipt.setBody(String.format(
-                "{\"amount\":%d,\"currency\":\"%s\",\"customerId\":\"%s\"}",
-                request.amount(), request.currency(), request.customerId()));
-
-        transactionProvider.get().performAndCloseV(txn ->
-                txn.getDao(ReceiptDao.class).createReceipt(receipt));
     }
 
     @Override
@@ -84,6 +69,26 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public void recordPaymentReceipt(String transactionId, long amount, String currency, String userId) {
+
+        if (userId == null || userId.isBlank()) {
+            return;
+        }
+
+        final var user = userService.getUser(userId);
+        final var receipt = new Receipt();
+        receipt.setOriginalTransactionId(transactionId);
+        receipt.setSchema(RECEIPT_SCHEMA);
+        receipt.setUser(user);
+        receipt.setPurchaseTime(System.currentTimeMillis());
+        receipt.setBody(String.format(
+                "{\"amount\":%d,\"currency\":\"%s\"}", amount, currency));
+
+        transactionProvider.get().performAndCloseV(txn ->
+                txn.getDao(ReceiptDao.class).createReceipt(receipt));
     }
 
 }

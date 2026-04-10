@@ -7,7 +7,6 @@ import dev.getelements.elements.sdk.model.user.User;
 import dev.getelements.elements.sdk.service.user.UserService;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.service.StripeServiceImpl;
-import jakarta.inject.Provider;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -29,11 +28,12 @@ public class StripePaymentIntentIT {
 
     private static StripeServiceImpl service() {
         final UserService userService = mock(UserService.class);
-        when(userService.getCurrentUser()).thenReturn(mock(User.class));
+        final var user = mock(User.class);
+        when(user.getId()).thenReturn("it_user");
+        when(userService.getCurrentUser()).thenReturn(user);
         final Transaction transaction = mock(Transaction.class);
         doAnswer(inv -> null).when(transaction).performAndCloseV(any());
-        final Provider<Transaction> txProvider = () -> transaction;
-        return new StripeServiceImpl(new LiveStripeGateway(), userService, txProvider);
+        return new StripeServiceImpl(new LiveStripeGateway(), userService, () -> transaction);
     }
 
     @Test

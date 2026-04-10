@@ -11,8 +11,9 @@ package dev.getelements.elements.stripe;
  */
 public final class StripeEvents {
 
-    public static final String PAYMENT_SUCCEEDED  = "payment_intent.succeeded";
-    public static final String PAYMENT_FAILED     = "payment_intent.payment_failed";
+    public static final String PAYMENT_SUCCEEDED      = "payment_intent.succeeded";
+    public static final String PAYMENT_FAILED         = "payment_intent.payment_failed";
+    public static final String INVOICE_PAYMENT_SUCCEEDED = "invoice.payment_succeeded";
     public static final String SUBSCRIPTION_CREATED   = "customer.subscription.created";
     public static final String SUBSCRIPTION_CANCELLED = "customer.subscription.deleted";
 
