@@ -28,8 +28,6 @@ mvn -pl debug exec:java
 
 ## Configuration
 
-Set the following attributes on the Element at deploy time (via `dev.getelements.element.attributes.properties` inside the `.elm` archive or through the admin UI):
-
 | Attribute key | Description | Default |
 |---|---|---|
 | `dev.getelements.elements.stripe.api.key` | Stripe secret API key (`sk_live_...` or `sk_test_...`) | *(empty)* |
@@ -37,12 +35,17 @@ Set the following attributes on the Element at deploy time (via `dev.getelements
 | `dev.getelements.elements.element.rs.root` | REST API root path | `/element/stripe/api` |
 | `dev.getelements.elements.auth.enabled` | Enable Elements session auth filter | `true` |
 
-Place credentials in `element/src/main/elm/dev.getelements.element.attributes.properties`:
+**Deployed instances** — set attributes via the admin panel under **Element Management**. Select the deployment and edit its attributes directly; no rebuild is required.
 
-```properties
-dev.getelements.elements.stripe.api.key=sk_test_YOUR_KEY
-dev.getelements.elements.stripe.webhook.secret=whsec_YOUR_SECRET
+**Local development** — set attributes in `run.java` before the element loads, or pass them as system properties on the command line:
+
+```bash
+mvn -pl debug exec:java \
+  -Ddev.getelements.elements.stripe.api.key=sk_test_YOUR_KEY \
+  -Ddev.getelements.elements.stripe.webhook.secret=whsec_YOUR_SECRET
 ```
+
+Defaults can also be baked into `element/src/main/elm/dev.getelements.element.attributes.properties` and will be packaged into the `.elm` archive, but these are overridden by anything set at the deployment level.
 
 ---
 
@@ -83,15 +86,33 @@ public class EntitlementService {
     public void onSubscriptionCancelled() {
         // revoke access, notify player, etc.
     }
+
+    @ElementEventConsumer(StripeEvents.RAW_WEBHOOK)
+    public void onAnyWebhook() {
+        // called for every verified Stripe webhook — use for event types
+        // that don't have a dedicated typed event
+    }
 }
 ```
 
-| Constant | Value | Emitted when | Arguments |
+### Typed events
+
+Published for the most common webhook types. Each carries strongly-typed fields so consumers don't need to parse Stripe payloads directly.
+
+| Constant | Stripe event | Emitted when | Fields |
 |---|---|---|---|
-| `StripeEvents.PAYMENT_SUCCEEDED` | `payment_intent.succeeded` | PaymentIntent succeeded | `paymentIntentId`, `amount`, `currency` |
-| `StripeEvents.PAYMENT_FAILED` | `payment_intent.payment_failed` | PaymentIntent failed | `paymentIntentId`, `failureMessage` |
-| `StripeEvents.SUBSCRIPTION_CREATED` | `customer.subscription.created` | Subscription created | `subscriptionId`, `customerId`, `status` |
-| `StripeEvents.SUBSCRIPTION_CANCELLED` | `customer.subscription.deleted` | Subscription cancelled | `subscriptionId`, `customerId` |
+| `PAYMENT_SUCCEEDED` | `payment_intent.succeeded` | One-time payment confirmed | `paymentIntentId`, `amount`, `currency` |
+| `PAYMENT_FAILED` | `payment_intent.payment_failed` | One-time payment failed | `paymentIntentId`, `failureMessage` |
+| `INVOICE_PAYMENT_SUCCEEDED` | `invoice.payment_succeeded` | Subscription renewal paid | `invoiceId`, `paymentIntentId`, `amountPaid`, `currency` |
+| `INVOICE_PAYMENT_FAILED` | `invoice.payment_failed` | Subscription renewal failed | `invoiceId`, `subscriptionId`, `customerId`, `failureMessage` |
+| `SUBSCRIPTION_CREATED` | `customer.subscription.created` | Subscription started | `subscriptionId`, `customerId`, `status` |
+| `SUBSCRIPTION_UPDATED` | `customer.subscription.updated` | Subscription changed (plan, quantity, trial→active, etc.) | `subscriptionId`, `customerId`, `status` |
+| `SUBSCRIPTION_CANCELLED` | `customer.subscription.deleted` | Subscription cancelled | `subscriptionId`, `customerId` |
+| `SUBSCRIPTION_TRIAL_WILL_END` | `customer.subscription.trial_will_end` | Trial ends in 3 days | `subscriptionId`, `customerId`, `trialEnd` (ISO-8601) |
+
+### Raw event
+
+`StripeEvents.RAW_WEBHOOK` (`stripe.webhook`) is published for **every** verified webhook, including the ones above. Fields: `type` (Stripe event type string), `eventId`, `rawJson` (full webhook payload). Use this to handle event types not covered by the typed events above without forking the element.
 
 ---
 
@@ -106,11 +127,15 @@ In the Stripe Dashboard, navigate to **Developers → Webhooks → Add endpoint*
   ```
   https://your-host/element/stripe/api/stripe/webhook
   ```
-- Subscribe to exactly these four events (others are silently ignored, but subscribing only to what you need is cleaner):
+- Subscribe to the events you need. Any webhook that arrives with a valid signature will be forwarded as a `RAW_WEBHOOK` event regardless; the typed events below are also published for the corresponding types:
   - `payment_intent.succeeded`
   - `payment_intent.payment_failed`
+  - `invoice.payment_succeeded`
+  - `invoice.payment_failed`
   - `customer.subscription.created`
+  - `customer.subscription.updated`
   - `customer.subscription.deleted`
+  - `customer.subscription.trial_will_end`
 
 After saving, Stripe shows a **Signing secret** (`whsec_...`). Copy this value into the `dev.getelements.elements.stripe.webhook.secret` attribute.
 

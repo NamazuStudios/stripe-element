@@ -1,10 +1,16 @@
 package dev.getelements.elements.stripe.rest;
 
 import dev.getelements.elements.sdk.Element;
+import dev.getelements.elements.sdk.Event;
+import dev.getelements.elements.stripe.event.StripeInvoicePaymentFailedEvent;
+import dev.getelements.elements.stripe.event.StripeInvoicePaymentSucceededEvent;
 import dev.getelements.elements.stripe.event.StripePaymentFailedEvent;
 import dev.getelements.elements.stripe.event.StripePaymentSucceededEvent;
+import dev.getelements.elements.stripe.event.StripeRawEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCancelledEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCreatedEvent;
+import dev.getelements.elements.stripe.event.StripeSubscriptionTrialWillEndEvent;
+import dev.getelements.elements.stripe.event.StripeSubscriptionUpdatedEvent;
 import dev.getelements.elements.stripe.service.StripeService;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -50,7 +57,51 @@ class StripeWebhookEndpointTest {
         verifyNoMoreInteractions(element);
     }
 
-    // --- event dispatch: happy paths ---
+    // --- raw event: always published ---
+
+    @Test
+    void anyKnownEvent_alsoPublishesRawEvent() throws Exception {
+
+        final String payload = """
+                {"id":"evt_raw_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"payment_intent.succeeded",
+                 "data":{"object":{"id":"pi_raw","object":"payment_intent",
+                 "amount":100,"currency":"usd","status":"succeeded"}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        final var raw = captureAllPublished().stream()
+                .filter(e -> e instanceof StripeRawEvent)
+                .map(e -> (StripeRawEvent) e)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("StripeRawEvent not published"));
+
+        assertEquals("payment_intent.succeeded", raw.type());
+        assertEquals("evt_raw_1", raw.eventId());
+        assertEquals(payload, raw.rawJson());
+    }
+
+    @Test
+    void unknownEventType_publishesOnlyRawEvent() throws Exception {
+
+        final String payload = """
+                {"id":"evt_unknown_1","object":"event","type":"charge.succeeded",
+                 "data":{"object":{"id":"ch_001","object":"charge"}}}""";
+
+        final var response = endpoint.receiveWebhook(payload, sig(payload));
+
+        assertEquals(200, response.getStatus());
+
+        final var published = captureAllPublished();
+        assertEquals(1, published.size(), "Expected only the raw event to be published");
+
+        final var raw = (StripeRawEvent) published.get(0);
+        assertEquals("charge.succeeded", raw.type());
+        assertEquals("evt_unknown_1", raw.eventId());
+    }
+
+    // --- payment_intent.succeeded ---
 
     @Test
     void paymentIntentSucceeded_publishesCorrectEvent() throws Exception {
@@ -65,13 +116,12 @@ class StripeWebhookEndpointTest {
 
         endpoint.receiveWebhook(payload, sig(payload));
 
-        final var captor = ArgumentCaptor.forClass(StripePaymentSucceededEvent.class);
+        final var published = captureAllPublished();
+        final var typed = assertSingleTyped(published, StripePaymentSucceededEvent.class);
 
-        verify(element).publish(captor.capture());
-
-        assertEquals("pi_001", captor.getValue().paymentIntentId());
-        assertEquals(2500L, captor.getValue().amount());
-        assertEquals("eur", captor.getValue().currency());
+        assertEquals("pi_001", typed.paymentIntentId());
+        assertEquals(2500L, typed.amount());
+        assertEquals("eur", typed.currency());
         verify(stripeService).recordPaymentReceipt("pi_001", 2500L, "eur", "user_abc");
     }
 
@@ -90,21 +140,7 @@ class StripeWebhookEndpointTest {
         verify(stripeService).recordPaymentReceipt("pi_002", 1000L, "usd", null);
     }
 
-    @Test
-    void invoicePaymentSucceeded_savesReceipt() throws Exception {
-
-        final String payload = """
-                {"id":"evt_inv_1","object":"event","api_version":"2024-04-10",
-                 "created":1234567890,"livemode":false,
-                 "type":"invoice.payment_succeeded",
-                 "data":{"object":{"id":"in_001","object":"invoice",
-                 "payment_intent":"pi_inv_001","amount_paid":999,"currency":"usd",
-                 "metadata":{"userId":"user_xyz"}}}}""";
-
-        endpoint.receiveWebhook(payload, sig(payload));
-
-        verify(stripeService).recordPaymentReceipt("pi_inv_001", 999L, "usd", "user_xyz");
-    }
+    // --- payment_intent.payment_failed ---
 
     @Test
     void paymentIntentFailed_publishesCorrectEvent() throws Exception {
@@ -119,12 +155,10 @@ class StripeWebhookEndpointTest {
 
         endpoint.receiveWebhook(payload, sig(payload));
 
-        final var captor = ArgumentCaptor.forClass(StripePaymentFailedEvent.class);
+        final var typed = assertSingleTyped(captureAllPublished(), StripePaymentFailedEvent.class);
 
-        verify(element).publish(captor.capture());
-
-        assertEquals("pi_002", captor.getValue().paymentIntentId());
-        assertEquals("Your card was declined.", captor.getValue().failureMessage());
+        assertEquals("pi_002", typed.paymentIntentId());
+        assertEquals("Your card was declined.", typed.failureMessage());
     }
 
     @Test
@@ -139,11 +173,74 @@ class StripeWebhookEndpointTest {
 
         endpoint.receiveWebhook(payload, sig(payload));
 
-        final var captor = ArgumentCaptor.forClass(StripePaymentFailedEvent.class);
-
-        verify(element).publish(captor.capture());
-        assertEquals("Unknown failure", captor.getValue().failureMessage());
+        final var typed = assertSingleTyped(captureAllPublished(), StripePaymentFailedEvent.class);
+        assertEquals("Unknown failure", typed.failureMessage());
     }
+
+    // --- invoice.payment_succeeded ---
+
+    @Test
+    void invoicePaymentSucceeded_publishesTypedEventAndSavesReceipt() throws Exception {
+
+        final String payload = """
+                {"id":"evt_inv_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"invoice.payment_succeeded",
+                 "data":{"object":{"id":"in_001","object":"invoice",
+                 "payment_intent":"pi_inv_001","amount_paid":999,"currency":"usd",
+                 "metadata":{"userId":"user_xyz"}}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        final var typed = assertSingleTyped(captureAllPublished(), StripeInvoicePaymentSucceededEvent.class);
+
+        assertEquals("in_001", typed.invoiceId());
+        assertEquals("pi_inv_001", typed.paymentIntentId());
+        assertEquals(999L, typed.amountPaid());
+        assertEquals("usd", typed.currency());
+        verify(stripeService).recordPaymentReceipt("pi_inv_001", 999L, "usd", "user_xyz");
+    }
+
+    // --- invoice.payment_failed ---
+
+    @Test
+    void invoicePaymentFailed_publishesCorrectEvent() throws Exception {
+
+        final String payload = """
+                {"id":"evt_inv_fail_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"invoice.payment_failed",
+                 "data":{"object":{"id":"in_002","object":"invoice",
+                 "subscription":"sub_fail_001","customer":"cus_fail_001",
+                 "last_finalization_error":{"message":"Your card has insufficient funds."}}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        final var typed = assertSingleTyped(captureAllPublished(), StripeInvoicePaymentFailedEvent.class);
+
+        assertEquals("in_002", typed.invoiceId());
+        assertEquals("sub_fail_001", typed.subscriptionId());
+        assertEquals("cus_fail_001", typed.customerId());
+        assertEquals("Your card has insufficient funds.", typed.failureMessage());
+    }
+
+    @Test
+    void invoicePaymentFailed_noErrorObject_usesDefaultMessage() throws Exception {
+
+        final String payload = """
+                {"id":"evt_inv_fail_2","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"invoice.payment_failed",
+                 "data":{"object":{"id":"in_003","object":"invoice",
+                 "subscription":"sub_fail_002","customer":"cus_fail_002"}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        final var typed = assertSingleTyped(captureAllPublished(), StripeInvoicePaymentFailedEvent.class);
+        assertEquals("Payment failed", typed.failureMessage());
+    }
+
+    // --- customer.subscription.created ---
 
     @Test
     void subscriptionCreated_publishesCorrectEvent() throws Exception {
@@ -157,14 +254,35 @@ class StripeWebhookEndpointTest {
 
         endpoint.receiveWebhook(payload, sig(payload));
 
-        final var captor = ArgumentCaptor.forClass(StripeSubscriptionCreatedEvent.class);
+        final var typed = assertSingleTyped(captureAllPublished(), StripeSubscriptionCreatedEvent.class);
 
-        verify(element).publish(captor.capture());
-
-        assertEquals("sub_001", captor.getValue().subscriptionId());
-        assertEquals("cus_001", captor.getValue().customerId());
-        assertEquals("active", captor.getValue().status());
+        assertEquals("sub_001", typed.subscriptionId());
+        assertEquals("cus_001", typed.customerId());
+        assertEquals("active", typed.status());
     }
+
+    // --- customer.subscription.updated ---
+
+    @Test
+    void subscriptionUpdated_publishesCorrectEvent() throws Exception {
+
+        final String payload = """
+                {"id":"evt_upd_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"customer.subscription.updated",
+                 "data":{"object":{"id":"sub_upd_001","object":"subscription",
+                 "customer":"cus_upd_001","status":"active"}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        final var typed = assertSingleTyped(captureAllPublished(), StripeSubscriptionUpdatedEvent.class);
+
+        assertEquals("sub_upd_001", typed.subscriptionId());
+        assertEquals("cus_upd_001", typed.customerId());
+        assertEquals("active", typed.status());
+    }
+
+    // --- customer.subscription.deleted ---
 
     @Test
     void subscriptionDeleted_publishesCorrectEvent() throws Exception {
@@ -178,29 +296,66 @@ class StripeWebhookEndpointTest {
 
         endpoint.receiveWebhook(payload, sig(payload));
 
-        final var captor = ArgumentCaptor.forClass(StripeSubscriptionCancelledEvent.class);
+        final var typed = assertSingleTyped(captureAllPublished(), StripeSubscriptionCancelledEvent.class);
 
-        verify(element).publish(captor.capture());
+        assertEquals("sub_002", typed.subscriptionId());
+        assertEquals("cus_002", typed.customerId());
+    }
 
-        assertEquals("sub_002", captor.getValue().subscriptionId());
-        assertEquals("cus_002", captor.getValue().customerId());
+    // --- customer.subscription.trial_will_end ---
+
+    @Test
+    void subscriptionTrialWillEnd_publishesCorrectEvent() throws Exception {
+
+        final String payload = """
+                {"id":"evt_trial_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"customer.subscription.trial_will_end",
+                 "data":{"object":{"id":"sub_trial_001","object":"subscription",
+                 "customer":"cus_trial_001","status":"trialing",
+                 "trial_end":1893456000}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        final var typed = assertSingleTyped(captureAllPublished(), StripeSubscriptionTrialWillEndEvent.class);
+
+        assertEquals("sub_trial_001", typed.subscriptionId());
+        assertEquals("cus_trial_001", typed.customerId());
+        assertNotNull(typed.trialEnd());
+        assertTrue(typed.trialEnd().startsWith("2030-"));
     }
 
     @Test
-    void unknownEventType_returnsOkWithoutPublishing() throws Exception {
+    void subscriptionTrialWillEnd_nullTrialEnd_publishesNullTrialEnd() throws Exception {
 
         final String payload = """
-                {"id":"evt_6","object":"event","type":"charge.succeeded",
-                 "data":{"object":{"id":"ch_001","object":"charge"}}}""";
+                {"id":"evt_trial_2","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"customer.subscription.trial_will_end",
+                 "data":{"object":{"id":"sub_trial_002","object":"subscription",
+                 "customer":"cus_trial_002","status":"trialing"}}}""";
 
-        final var response = endpoint.receiveWebhook(payload, sig(payload));
+        endpoint.receiveWebhook(payload, sig(payload));
 
-        assertEquals(200, response.getStatus());
-
-        verify(element, never()).publish(any());
+        final var typed = assertSingleTyped(captureAllPublished(), StripeSubscriptionTrialWillEndEvent.class);
+        assertNull(typed.trialEnd());
     }
 
     // --- helpers ---
+
+    private List<Event> captureAllPublished() {
+        final var captor = ArgumentCaptor.forClass(Event.class);
+        verify(element, atLeast(1)).publish(captor.capture());
+        return captor.getAllValues();
+    }
+
+    private <T> T assertSingleTyped(List<Event> published, Class<T> type) {
+        return published.stream()
+                .filter(type::isInstance)
+                .map(type::cast)
+                .reduce((a, b) -> { throw new AssertionError("Multiple " + type.getSimpleName() + " published"); })
+                .orElseThrow(() -> new AssertionError("No " + type.getSimpleName() + " published"));
+    }
 
     private String sig(String payload) throws Exception {
 
