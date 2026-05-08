@@ -3,6 +3,7 @@ package dev.getelements.elements.stripe.service;
 import com.google.inject.Inject;
 import com.stripe.exception.StripeException;
 import com.stripe.param.PaymentIntentCreateParams;
+import dev.getelements.elements.sdk.annotation.ElementServiceExport;
 import dev.getelements.elements.sdk.dao.ReceiptDao;
 import dev.getelements.elements.sdk.dao.Transaction;
 import dev.getelements.elements.sdk.model.receipt.Receipt;
@@ -15,6 +16,7 @@ import jakarta.ws.rs.InternalServerErrorException;
 
 import java.time.Instant;
 
+@ElementServiceExport(StripeService.class)
 public class StripeServiceImpl implements StripeService {
 
     private static final String RECEIPT_SCHEMA = "stripe";

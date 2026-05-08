@@ -84,7 +84,7 @@ public class StripeWebhookEndpoint {
     /**
      * Package-private — used by unit tests to supply dependencies without the service locator.
      */
-    StripeWebhookEndpoint(Element element, String webhookSecret, StripeService stripeService) {
+    public StripeWebhookEndpoint(Element element, String webhookSecret, StripeService stripeService) {
         this.element = element;
         this.configService = new StripeConfigService() {
             @Override public StripeConfig getConfig() { return new StripeConfig("", webhookSecret); }
