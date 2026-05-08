@@ -6,6 +6,7 @@ import dev.getelements.elements.stripe.event.StripeSubscriptionCancelledEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCreatedEvent;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -40,28 +41,34 @@ class StripeEventTest {
 
     @Test
     void subscriptionCreated_name() {
-        final var event = new StripeSubscriptionCreatedEvent("sub_001", "cus_001", "active");
+        final var event = new StripeSubscriptionCreatedEvent("sub_001", "cus_001", "active", "org_001");
         assertEquals(StripeEvents.SUBSCRIPTION_CREATED, event.getEventName());
         assertFalse(event.isSystemEvent());
     }
 
     @Test
     void subscriptionCreated_arguments() {
-        final var event = new StripeSubscriptionCreatedEvent("sub_001", "cus_001", "active");
-        assertEquals(List.of("sub_001", "cus_001", "active"), event.getEventArguments());
+        final var event = new StripeSubscriptionCreatedEvent("sub_001", "cus_001", "active", "org_001");
+        assertEquals(Arrays.asList("sub_001", "cus_001", "active", "org_001"), event.getEventArguments());
+    }
+
+    @Test
+    void subscriptionCreated_nullOrgId_includedInArguments() {
+        final var event = new StripeSubscriptionCreatedEvent("sub_002", "cus_002", "active", null);
+        assertEquals(Arrays.asList("sub_002", "cus_002", "active", null), event.getEventArguments());
     }
 
     @Test
     void subscriptionCancelled_name() {
-        final var event = new StripeSubscriptionCancelledEvent("sub_002", "cus_002");
+        final var event = new StripeSubscriptionCancelledEvent("sub_003", "cus_003", "org_003");
         assertEquals(StripeEvents.SUBSCRIPTION_CANCELLED, event.getEventName());
         assertFalse(event.isSystemEvent());
     }
 
     @Test
     void subscriptionCancelled_arguments() {
-        final var event = new StripeSubscriptionCancelledEvent("sub_002", "cus_002");
-        assertEquals(List.of("sub_002", "cus_002"), event.getEventArguments());
+        final var event = new StripeSubscriptionCancelledEvent("sub_003", "cus_003", "org_003");
+        assertEquals(Arrays.asList("sub_003", "cus_003", "org_003"), event.getEventArguments());
     }
 
 }

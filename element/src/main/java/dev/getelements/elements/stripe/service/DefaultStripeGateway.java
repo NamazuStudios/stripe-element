@@ -2,10 +2,16 @@ package dev.getelements.elements.stripe.service;
 
 import com.google.inject.Inject;
 import com.stripe.exception.StripeException;
+import com.stripe.model.Customer;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.PaymentMethodCollection;
+import com.stripe.model.SetupIntent;
 import com.stripe.model.Subscription;
 import com.stripe.net.RequestOptions;
+import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.PaymentIntentCreateParams;
+import com.stripe.param.CustomerListPaymentMethodsParams;
+import com.stripe.param.SetupIntentCreateParams;
 import jakarta.ws.rs.InternalServerErrorException;
 
 public class DefaultStripeGateway implements StripeGateway {
@@ -15,6 +21,21 @@ public class DefaultStripeGateway implements StripeGateway {
     @Inject
     private DefaultStripeGateway(StripeConfigService configService) {
         this.configService = configService;
+    }
+
+    @Override
+    public Customer createCustomer(CustomerCreateParams params) throws StripeException {
+        return Customer.create(params, options());
+    }
+
+    @Override
+    public SetupIntent createSetupIntent(SetupIntentCreateParams params) throws StripeException {
+        return SetupIntent.create(params, options());
+    }
+
+    @Override
+    public PaymentMethodCollection listPaymentMethods(String customerId, CustomerListPaymentMethodsParams params) throws StripeException {
+        return Customer.retrieve(customerId, options()).listPaymentMethods(params, options());
     }
 
     @Override

@@ -2,19 +2,26 @@ package dev.getelements.elements.stripe.service;
 
 import com.google.inject.Inject;
 import com.stripe.exception.StripeException;
+import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.PaymentIntentCreateParams;
+import com.stripe.param.CustomerListPaymentMethodsParams;
+import com.stripe.param.SetupIntentCreateParams;
 import dev.getelements.elements.sdk.annotation.ElementServiceExport;
 import dev.getelements.elements.sdk.dao.ReceiptDao;
 import dev.getelements.elements.sdk.dao.Transaction;
 import dev.getelements.elements.sdk.model.receipt.Receipt;
 import dev.getelements.elements.sdk.service.user.UserService;
+import dev.getelements.elements.stripe.model.CreateCustomerResponse;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
+import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
+import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.InternalServerErrorException;
 
 import java.time.Instant;
+import java.util.List;
 
 @ElementServiceExport(StripeService.class)
 public class StripeServiceImpl implements StripeService {
@@ -33,6 +40,68 @@ public class StripeServiceImpl implements StripeService {
         this.gateway = gateway;
         this.userService = userService;
         this.transactionProvider = transactionProvider;
+    }
+
+    @Override
+    public CreateCustomerResponse createCustomer(String email, String name, String orgId) {
+
+        try {
+
+            final var params = CustomerCreateParams.builder()
+                    .setEmail(email)
+                    .setName(name)
+                    .putMetadata(StripeService.METADATA_ORG_ID, orgId)
+                    .build();
+
+            final var customer = gateway.createCustomer(params);
+            return new CreateCustomerResponse(customer.getId());
+
+        } catch (StripeException e) {
+            throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public CreateSetupIntentResponse createSetupIntent(String customerId) {
+
+        try {
+
+            final var params = SetupIntentCreateParams.builder()
+                    .setCustomer(customerId)
+                    .addPaymentMethodType("card")
+                    .build();
+
+            final var intent = gateway.createSetupIntent(params);
+            return new CreateSetupIntentResponse(intent.getId(), intent.getClientSecret());
+
+        } catch (StripeException e) {
+            throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public List<PaymentMethodSummary> listPaymentMethods(String customerId) {
+
+        try {
+
+            final var params = CustomerListPaymentMethodsParams.builder()
+                    .setType(CustomerListPaymentMethodsParams.Type.CARD)
+                    .build();
+
+            return gateway.listPaymentMethods(customerId, params).getData().stream()
+                    .map(pm -> {
+                        final var card = pm.getCard();
+                        return new PaymentMethodSummary(
+                                pm.getId(),
+                                pm.getType(),
+                                card != null ? card.getBrand() : null,
+                                card != null ? card.getLast4() : null);
+                    })
+                    .toList();
+
+        } catch (StripeException e) {
+            throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
+        }
     }
 
     @Override

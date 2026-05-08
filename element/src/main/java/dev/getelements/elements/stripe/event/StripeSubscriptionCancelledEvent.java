@@ -3,9 +3,13 @@ package dev.getelements.elements.stripe.event;
 import dev.getelements.elements.sdk.Event;
 import dev.getelements.elements.stripe.StripeEvents;
 
+import java.util.Arrays;
 import java.util.List;
 
-public record StripeSubscriptionCancelledEvent(String subscriptionId, String customerId) implements Event {
+public record StripeSubscriptionCancelledEvent(
+        String subscriptionId,
+        String customerId,
+        String orgId) implements Event {
 
     @Override
     public String getEventName() {
@@ -14,7 +18,7 @@ public record StripeSubscriptionCancelledEvent(String subscriptionId, String cus
 
     @Override
     public List<Object> getEventArguments() {
-        return List.of(subscriptionId, customerId);
+        return Arrays.asList(subscriptionId, customerId, orgId);
     }
 
 }

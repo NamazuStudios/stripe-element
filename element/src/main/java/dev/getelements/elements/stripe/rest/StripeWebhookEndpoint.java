@@ -194,10 +194,12 @@ public class StripeWebhookEndpoint {
                 final var sub = (Subscription)
                         event.getDataObjectDeserializer().getObject().orElseThrow();
 
+                final var meta = sub.getMetadata();
                 element.publish(new StripeSubscriptionCreatedEvent(
                         sub.getId(),
                         sub.getCustomer(),
-                        sub.getStatus()
+                        sub.getStatus(),
+                        meta != null ? meta.get(StripeService.METADATA_ORG_ID) : null
                 ));
             }
 
@@ -206,10 +208,12 @@ public class StripeWebhookEndpoint {
                 final var sub = (Subscription)
                         event.getDataObjectDeserializer().getObject().orElseThrow();
 
+                final var meta = sub.getMetadata();
                 element.publish(new StripeSubscriptionUpdatedEvent(
                         sub.getId(),
                         sub.getCustomer(),
-                        sub.getStatus()
+                        sub.getStatus(),
+                        meta != null ? meta.get(StripeService.METADATA_ORG_ID) : null
                 ));
             }
 
@@ -218,9 +222,11 @@ public class StripeWebhookEndpoint {
                 final var sub = (Subscription)
                         event.getDataObjectDeserializer().getObject().orElseThrow();
 
+                final var meta = sub.getMetadata();
                 element.publish(new StripeSubscriptionCancelledEvent(
                         sub.getId(),
-                        sub.getCustomer()
+                        sub.getCustomer(),
+                        meta != null ? meta.get(StripeService.METADATA_ORG_ID) : null
                 ));
             }
 
@@ -229,6 +235,7 @@ public class StripeWebhookEndpoint {
                 final var sub = (Subscription)
                         event.getDataObjectDeserializer().getObject().orElseThrow();
 
+                final var meta = sub.getMetadata();
                 final var trialEnd = sub.getTrialEnd() != null
                         ? Instant.ofEpochSecond(sub.getTrialEnd()).toString()
                         : null;
@@ -236,7 +243,8 @@ public class StripeWebhookEndpoint {
                 element.publish(new StripeSubscriptionTrialWillEndEvent(
                         sub.getId(),
                         sub.getCustomer(),
-                        trialEnd
+                        trialEnd,
+                        meta != null ? meta.get(StripeService.METADATA_ORG_ID) : null
                 ));
             }
 

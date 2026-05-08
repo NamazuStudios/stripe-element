@@ -3,9 +3,14 @@ package dev.getelements.elements.stripe.event;
 import dev.getelements.elements.sdk.Event;
 import dev.getelements.elements.stripe.StripeEvents;
 
+import java.util.Arrays;
 import java.util.List;
 
-public record StripeSubscriptionCreatedEvent(String subscriptionId, String customerId, String status) implements Event {
+public record StripeSubscriptionCreatedEvent(
+        String subscriptionId,
+        String customerId,
+        String status,
+        String orgId) implements Event {
 
     @Override
     public String getEventName() {
@@ -14,7 +19,7 @@ public record StripeSubscriptionCreatedEvent(String subscriptionId, String custo
 
     @Override
     public List<Object> getEventArguments() {
-        return List.of(subscriptionId, customerId, status);
+        return Arrays.asList(subscriptionId, customerId, status, orgId);
     }
 
 }
