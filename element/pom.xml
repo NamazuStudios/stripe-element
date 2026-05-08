@@ -82,16 +82,21 @@
             <groupId>dev.getelements.elements</groupId>
             <artifactId>sdk-mongo</artifactId>
         </dependency>
+        <!-- DAO layer — provides Transaction, Datastore, and all platform DAOs -->
+        <dependency>
+            <groupId>dev.getelements.elements</groupId>
+            <artifactId>sdk-dao</artifactId>
+        </dependency>
         <!--
-            MongoDB Java driver — bundled inside the .elm (compile scope) so the element's
-            own URLClassLoader can find MongoClient without depending on the platform's
-            Morphia classloader. Version must match the platform's driver to share the
-            same wire protocol, but the classes themselves are element-local.
+            Morphia ODM — provided by the platform at runtime via MorphiaPackageRequest.
+            Listed here with provided scope so the element compiles against Morphia types
+            (entity annotations, Datastore, Filters) without bundling the library.
         -->
         <dependency>
-            <groupId>org.mongodb</groupId>
-            <artifactId>mongodb-driver-sync</artifactId>
-            <version>4.10.2</version>
+            <groupId>dev.morphia.morphia</groupId>
+            <artifactId>morphia-core</artifactId>
+            <version>${morphia.version}</version>
+            <scope>provided</scope>
         </dependency>
         <!-- Test dependencies -->
         <dependency>
