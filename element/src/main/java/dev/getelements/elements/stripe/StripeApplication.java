@@ -11,7 +11,7 @@ import jakarta.ws.rs.core.Application;
 import java.util.Set;
 
 @ElementServiceImplementation
-@ElementServiceExport(Application.class)
+@ElementServiceExport(value = Application.class, expose = false)
 public class StripeApplication extends Application {
 
     @ElementDefaultAttribute("true")

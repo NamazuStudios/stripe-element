@@ -1,14 +1,12 @@
 package dev.getelements.elements.stripe.consumer.rest;
 
 import dev.getelements.elements.sdk.annotation.ElementDefaultAttribute;
-import dev.getelements.elements.sdk.annotation.ElementServiceExport;
 import dev.getelements.elements.sdk.annotation.ElementServiceImplementation;
 import jakarta.ws.rs.core.Application;
 
 import java.util.Set;
 
 @ElementServiceImplementation
-@ElementServiceExport(Application.class)
 public class ConsumerApplication extends Application {
 
     /** Auth is disabled — this Element is a test harness, not a production endpoint. */
