@@ -34,12 +34,12 @@ public class StripeEventCaptureImpl implements StripeEventCapture {
     }
 
     @ElementEventConsumer(StripeEvents.SUBSCRIPTION_CREATED)
-    public void onSubscriptionCreated(String subscriptionId, String customerId, String status) {
+    public void onSubscriptionCreated(String subscriptionId, String customerId, String status, String orgId) {
         subscriptionCreatedIds.add(subscriptionId);
     }
 
     @ElementEventConsumer(StripeEvents.SUBSCRIPTION_CANCELLED)
-    public void onSubscriptionCancelled(String subscriptionId, String customerId) {
+    public void onSubscriptionCancelled(String subscriptionId, String customerId, String orgId) {
         subscriptionCancelledIds.add(subscriptionId);
     }
 
