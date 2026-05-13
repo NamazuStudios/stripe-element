@@ -1,4 +1,5 @@
 import React from 'react'
+import { sessionHeaders } from './api'
 
 interface StripeConfig {
   apiKey: string
@@ -18,7 +19,7 @@ export function StripeConfigPlugin() {
   React.useEffect(() => {
     async function loadConfig() {
       try {
-        const res = await fetch(CONFIG_URL, { credentials: 'include' })
+        const res = await fetch(CONFIG_URL, { credentials: 'include', headers: sessionHeaders() })
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
         const data: StripeConfig = await res.json()
         setApiKey(data.apiKey)
@@ -41,7 +42,7 @@ export function StripeConfigPlugin() {
       const res = await fetch(CONFIG_URL, {
         method: 'PUT',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: sessionHeaders(),
         body: JSON.stringify({ apiKey, webhookSecret }),
       })
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)

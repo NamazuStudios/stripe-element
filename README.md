@@ -116,6 +116,20 @@ Published for the most common webhook types. Each carries strongly-typed fields 
 
 ---
 
+## Multi-Environment Deployments
+
+The recommended approach for running separate environments (e.g. `MyGame_Dev`, `MyGame_Staging`, `MyGame_Prod`) is to deploy a distinct instance of this Element for each environment.
+
+Each deployment gets its own:
+- Stripe API key and webhook secret (configured independently via the **Stripe → Configuration** tab in the superuser UI)
+- MongoDB database (or at minimum a separate MongoDB instance), so configuration and event log data are naturally isolated with no additional namespacing required
+
+In the Elements platform this maps directly to creating separate application deployments — one per environment. Because each deployment connects to its own database, the DAO layer requires no special configuration to achieve isolation.
+
+> **Note:** Do not share a MongoDB database between multiple deployments of this Element. The configuration and event log collections use fixed names and are not namespaced per deployment.
+
+---
+
 ## Stripe Dashboard Setup
 
 ### Webhook configuration

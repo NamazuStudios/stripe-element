@@ -5,7 +5,7 @@
       "label": "Stripe",
       "icon": "CreditCard",
       "bundlePath": "plugin.bundle.js",
-      "route": "stripe-config"
+      "route": "stripe"
     }
   ]
 }

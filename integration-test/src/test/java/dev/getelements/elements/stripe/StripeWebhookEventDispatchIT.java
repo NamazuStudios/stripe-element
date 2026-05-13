@@ -7,6 +7,7 @@ import dev.getelements.elements.stripe.event.StripeSubscriptionCreatedEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionTrialWillEndEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionUpdatedEvent;
 import dev.getelements.elements.stripe.rest.StripeWebhookEndpoint;
+import dev.getelements.elements.stripe.service.StripeEventLogService;
 import dev.getelements.elements.stripe.service.StripeService;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,7 @@ public class StripeWebhookEventDispatchIT {
     private static Response post(Element element, String payload) throws Exception {
         final var timestamp = System.currentTimeMillis() / 1000L;
         final var sig = buildSignatureHeader(payload, timestamp);
-        return new StripeWebhookEndpoint(element, TEST_SECRET, mock(StripeService.class))
+        return new StripeWebhookEndpoint(element, TEST_SECRET, mock(StripeService.class), mock(StripeEventLogService.class))
                 .receiveWebhook(payload, sig);
     }
 

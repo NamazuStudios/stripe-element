@@ -6,10 +6,14 @@ import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethodCollection;
 import com.stripe.model.SetupIntent;
 import com.stripe.model.Subscription;
+import com.stripe.model.SubscriptionCollection;
+import com.stripe.model.billingportal.Session;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.SetupIntentCreateParams;
+import com.stripe.param.SubscriptionListParams;
+import com.stripe.param.billingportal.SessionCreateParams;
 import dev.getelements.elements.stripe.service.StripeGateway;
 
 /**
@@ -41,6 +45,16 @@ class LiveStripeGateway implements StripeGateway {
     @Override
     public Subscription retrieveSubscription(String subscriptionId) throws StripeException {
         return Subscription.retrieve(subscriptionId);
+    }
+
+    @Override
+    public SubscriptionCollection listSubscriptions(SubscriptionListParams params) throws StripeException {
+        return Subscription.list(params);
+    }
+
+    @Override
+    public Session createBillingPortalSession(SessionCreateParams params) throws StripeException {
+        return Session.create(params);
     }
 
 }

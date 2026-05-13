@@ -5,6 +5,7 @@ import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
+import dev.getelements.elements.stripe.model.SubscriptionListResponse;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 
 import java.util.List;
@@ -37,6 +38,26 @@ public interface StripeService {
     CreatePaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request);
 
     SubscriptionStatusResponse getSubscriptionStatus(String subscriptionId);
+
+    /**
+     * Lists subscriptions for the given Stripe customer ID.
+     *
+     * @param customerId    Stripe customer ID
+     * @param status        Stripe status filter (e.g. {@code "active"}, {@code "canceled"}, {@code "all"});
+     *                      pass {@code null} to use Stripe's default (non-canceled subscriptions)
+     * @param limit         maximum results to return (1–100)
+     * @param startingAfter subscription ID cursor for the next page; {@code null} for the first page
+     */
+    SubscriptionListResponse listSubscriptionsByCustomer(String customerId, String status, int limit, String startingAfter);
+
+    /**
+     * Creates a Stripe Customer Portal session for the given customer.
+     *
+     * @param customerId the Stripe customer ID
+     * @param returnUrl  optional URL to redirect the customer to after they leave the portal; may be {@code null}
+     * @return the single-use portal session URL
+     */
+    String createBillingPortalSession(String customerId, String returnUrl);
 
     /**
      * Records a receipt for a confirmed payment. Called from the webhook handler after

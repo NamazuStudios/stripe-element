@@ -6,10 +6,14 @@ import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethodCollection;
 import com.stripe.model.SetupIntent;
 import com.stripe.model.Subscription;
+import com.stripe.model.SubscriptionCollection;
+import com.stripe.model.billingportal.Session;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
 import com.stripe.param.SetupIntentCreateParams;
+import com.stripe.param.SubscriptionListParams;
+import com.stripe.param.billingportal.SessionCreateParams;
 
 public interface StripeGateway {
 
@@ -22,5 +26,9 @@ public interface StripeGateway {
     PaymentIntent createPaymentIntent(PaymentIntentCreateParams params) throws StripeException;
 
     Subscription retrieveSubscription(String subscriptionId) throws StripeException;
+
+    SubscriptionCollection listSubscriptions(SubscriptionListParams params) throws StripeException;
+
+    Session createBillingPortalSession(SessionCreateParams params) throws StripeException;
 
 }

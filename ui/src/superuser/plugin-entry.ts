@@ -1,4 +1,4 @@
-import { StripeConfigPlugin } from './StripeConfigPlugin'
+import { StripePlugin } from './StripePlugin'
 
 declare const window: Window & {
   __elementsPlugins?: {
@@ -6,4 +6,4 @@ declare const window: Window & {
   }
 }
 
-window.__elementsPlugins?.register('stripe-config', StripeConfigPlugin)
+window.__elementsPlugins?.register('stripe', StripePlugin)

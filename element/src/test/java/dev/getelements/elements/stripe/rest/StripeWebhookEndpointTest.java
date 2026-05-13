@@ -11,6 +11,7 @@ import dev.getelements.elements.stripe.event.StripeSubscriptionCancelledEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCreatedEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionTrialWillEndEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionUpdatedEvent;
+import dev.getelements.elements.stripe.service.StripeEventLogService;
 import dev.getelements.elements.stripe.service.StripeService;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,11 +40,14 @@ class StripeWebhookEndpointTest {
     @Mock
     private StripeService stripeService;
 
+    @Mock
+    private StripeEventLogService eventLogService;
+
     private StripeWebhookEndpoint endpoint;
 
     @BeforeEach
     void setUp() {
-        endpoint = new StripeWebhookEndpoint(element, TEST_SECRET, stripeService);
+        endpoint = new StripeWebhookEndpoint(element, TEST_SECRET, stripeService, eventLogService);
     }
 
     // --- signature verification ---
@@ -80,6 +84,21 @@ class StripeWebhookEndpointTest {
         assertEquals("payment_intent.succeeded", raw.type());
         assertEquals("evt_raw_1", raw.eventId());
         assertEquals(payload, raw.rawJson());
+    }
+
+    @Test
+    void anyValidEvent_logsEventToService() throws Exception {
+
+        final String payload = """
+                {"id":"evt_log_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"payment_intent.succeeded",
+                 "data":{"object":{"id":"pi_log","object":"payment_intent",
+                 "amount":100,"currency":"usd","status":"succeeded"}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        verify(eventLogService).logEvent("evt_log_1", "payment_intent.succeeded");
     }
 
     @Test

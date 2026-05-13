@@ -2,6 +2,7 @@ package dev.getelements.elements.stripe;
 
 import dev.getelements.elements.sdk.Element;
 import dev.getelements.elements.stripe.rest.StripeWebhookEndpoint;
+import dev.getelements.elements.stripe.service.StripeEventLogService;
 import dev.getelements.elements.stripe.service.StripeService;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeAll;
@@ -37,7 +38,7 @@ public class StripeWebhookEndpointIT {
     }
 
     private StripeWebhookEndpoint endpoint() {
-        return new StripeWebhookEndpoint(mock(Element.class), webhookSecret, mock(StripeService.class));
+        return new StripeWebhookEndpoint(mock(Element.class), webhookSecret, mock(StripeService.class), mock(StripeEventLogService.class));
     }
 
     @Test
@@ -80,7 +81,7 @@ public class StripeWebhookEndpointIT {
 
     @Test
     void receiveWebhook_missingSecret_returns503() {
-        final var endpoint = new StripeWebhookEndpoint(mock(Element.class), "", mock(StripeService.class));
+        final var endpoint = new StripeWebhookEndpoint(mock(Element.class), "", mock(StripeService.class), mock(StripeEventLogService.class));
         final var payload = "{\"id\":\"evt_it_003\",\"object\":\"event\",\"type\":\"ping\",\"data\":{\"object\":{}}}";
 
         final var response = endpoint.receiveWebhook(payload, "t=1234567890,v1=anything");

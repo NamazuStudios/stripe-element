@@ -22,6 +22,7 @@ import dev.getelements.elements.stripe.event.StripeSubscriptionTrialWillEndEvent
 import dev.getelements.elements.stripe.event.StripeSubscriptionUpdatedEvent;
 import dev.getelements.elements.stripe.model.StripeConfig;
 import dev.getelements.elements.stripe.service.StripeConfigService;
+import dev.getelements.elements.stripe.service.StripeEventLogService;
 import dev.getelements.elements.stripe.service.StripeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -71,6 +72,7 @@ public class StripeWebhookEndpoint {
     private final Element element;
     private final StripeConfigService configService;
     private final StripeService stripeService;
+    private final StripeEventLogService eventLogService;
 
     /** Used by the JAX-RS container at runtime. */
     public StripeWebhookEndpoint() {
@@ -79,18 +81,20 @@ public class StripeWebhookEndpoint {
         final var locator = el.getServiceLocator();
         this.configService = locator.getInstance(StripeConfigService.class);
         this.stripeService = locator.getInstance(StripeService.class);
+        this.eventLogService = locator.getInstance(StripeEventLogService.class);
     }
 
     /**
      * Package-private — used by unit tests to supply dependencies without the service locator.
      */
-    public StripeWebhookEndpoint(Element element, String webhookSecret, StripeService stripeService) {
+    public StripeWebhookEndpoint(Element element, String webhookSecret, StripeService stripeService, StripeEventLogService eventLogService) {
         this.element = element;
         this.configService = new StripeConfigService() {
             @Override public StripeConfig getConfig() { return new StripeConfig("", webhookSecret); }
             @Override public void saveConfig(StripeConfig c) {}
         };
         this.stripeService = stripeService;
+        this.eventLogService = eventLogService;
     }
 
     @POST
@@ -122,8 +126,9 @@ public class StripeWebhookEndpoint {
                     .build();
         }
 
-        // Always publish the raw event so consumers can handle any webhook type.
+        // Always publish the raw event and log it, regardless of type.
         element.publish(new StripeRawEvent(event.getType(), event.getId(), payload));
+        eventLogService.logEvent(event.getId(), event.getType());
 
         switch (event.getType()) {
 
