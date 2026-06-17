@@ -3,22 +3,20 @@ package dev.getelements.elements.stripe.event;
 import dev.getelements.elements.sdk.Event;
 import dev.getelements.elements.stripe.StripeEvents;
 
-import java.util.Arrays;
 import java.util.List;
 
-public record StripePaymentFailedEvent(
-        String paymentIntentId,
-        String failureMessage,
+public record StripeSetupIntentSucceededEvent(
+        String setupIntentId,
         String customerId) implements Event {
 
     @Override
     public String getEventName() {
-        return StripeEvents.PAYMENT_FAILED;
+        return StripeEvents.SETUP_INTENT_SUCCEEDED;
     }
 
     @Override
     public List<Object> getEventArguments() {
-        return Arrays.asList(paymentIntentId, failureMessage, customerId);
+        return List.of(setupIntentId, customerId);
     }
 
 }

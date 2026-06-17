@@ -9,8 +9,11 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import dev.getelements.elements.stripe.service.StripePriceCache;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.mockito.Mockito.mock;
 
 /**
  * Live integration tests for customer management, SetupIntent creation, and payment method listing.
@@ -35,7 +38,7 @@ public class StripeCustomerIT {
     }
 
     private static StripeServiceImpl service() {
-        return new StripeServiceImpl(new LiveStripeGateway(), null, null);
+        return new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), null, null);
     }
 
     // ---- createCustomer -----------------------------------------------------

@@ -4,6 +4,8 @@ import dev.getelements.elements.sdk.Element;
 import dev.getelements.elements.sdk.Event;
 import dev.getelements.elements.stripe.event.StripeInvoicePaymentFailedEvent;
 import dev.getelements.elements.stripe.event.StripeInvoicePaymentSucceededEvent;
+import dev.getelements.elements.stripe.event.StripeCheckoutSessionCompletedEvent;
+import dev.getelements.elements.stripe.event.StripePaymentCanceledEvent;
 import dev.getelements.elements.stripe.event.StripePaymentFailedEvent;
 import dev.getelements.elements.stripe.event.StripePaymentSucceededEvent;
 import dev.getelements.elements.stripe.event.StripeRawEvent;
@@ -131,6 +133,7 @@ class StripeWebhookEndpointTest {
                  "type":"payment_intent.succeeded",
                  "data":{"object":{"id":"pi_001","object":"payment_intent",
                  "amount":2500,"currency":"eur","status":"succeeded",
+                 "customer":"cus_001",
                  "metadata":{"userId":"user_abc"}}}}""";
 
         endpoint.receiveWebhook(payload, sig(payload));
@@ -141,6 +144,7 @@ class StripeWebhookEndpointTest {
         assertEquals("pi_001", typed.paymentIntentId());
         assertEquals(2500L, typed.amount());
         assertEquals("eur", typed.currency());
+        assertEquals("cus_001", typed.customerId());
         verify(stripeService).recordPaymentReceipt("pi_001", 2500L, "eur", "user_abc");
     }
 
@@ -170,6 +174,7 @@ class StripeWebhookEndpointTest {
                  "type":"payment_intent.payment_failed",
                  "data":{"object":{"id":"pi_002","object":"payment_intent",
                  "amount":1000,"currency":"usd","status":"requires_payment_method",
+                 "customer":"cus_002",
                  "last_payment_error":{"message":"Your card was declined."}}}}""";
 
         endpoint.receiveWebhook(payload, sig(payload));
@@ -178,6 +183,7 @@ class StripeWebhookEndpointTest {
 
         assertEquals("pi_002", typed.paymentIntentId());
         assertEquals("Your card was declined.", typed.failureMessage());
+        assertEquals("cus_002", typed.customerId());
     }
 
     @Test
@@ -194,6 +200,77 @@ class StripeWebhookEndpointTest {
 
         final var typed = assertSingleTyped(captureAllPublished(), StripePaymentFailedEvent.class);
         assertEquals("Unknown failure", typed.failureMessage());
+    }
+
+    // --- payment_intent.canceled ---
+
+    @Test
+    void paymentIntentCanceled_publishesCorrectEvent() throws Exception {
+
+        final String payload = """
+                {"id":"evt_cancel_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"payment_intent.canceled",
+                 "data":{"object":{"id":"pi_canceled_001","object":"payment_intent",
+                 "amount":500,"currency":"usd","status":"canceled",
+                 "customer":"cus_cancel_001"}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        final var typed = assertSingleTyped(captureAllPublished(), StripePaymentCanceledEvent.class);
+
+        assertEquals("pi_canceled_001", typed.paymentIntentId());
+        assertEquals("cus_cancel_001", typed.customerId());
+    }
+
+    // --- checkout.session.completed ---
+
+    @Test
+    void checkoutSessionCompleted_subscriptionMode_publishesCorrectEvent() throws Exception {
+
+        final String payload = """
+                {"id":"evt_cs_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"checkout.session.completed",
+                 "data":{"object":{"id":"cs_001","object":"checkout.session",
+                 "customer":"cus_cs_001","subscription":"sub_cs_001",
+                 "payment_intent":null,"mode":"subscription",
+                 "metadata":{"orgId":"org_001","addonId":"addon_xyz"}}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        final var typed = assertSingleTyped(captureAllPublished(), StripeCheckoutSessionCompletedEvent.class);
+
+        assertEquals("cs_001", typed.sessionId());
+        assertEquals("cus_cs_001", typed.customerId());
+        assertEquals("sub_cs_001", typed.subscriptionId());
+        assertEquals("subscription", typed.mode());
+        assertNotNull(typed.metadata());
+        assertEquals("org_001", typed.metadata().get("orgId"));
+        assertEquals("addon_xyz", typed.metadata().get("addonId"));
+    }
+
+    @Test
+    void checkoutSessionCompleted_paymentMode_publishesCorrectEvent() throws Exception {
+
+        final String payload = """
+                {"id":"evt_cs_2","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"checkout.session.completed",
+                 "data":{"object":{"id":"cs_002","object":"checkout.session",
+                 "customer":"cus_cs_002","payment_intent":"pi_cs_002",
+                 "subscription":null,"mode":"payment",
+                 "metadata":{"orgId":"org_002"}}}}""";
+
+        endpoint.receiveWebhook(payload, sig(payload));
+
+        final var typed = assertSingleTyped(captureAllPublished(), StripeCheckoutSessionCompletedEvent.class);
+
+        assertEquals("cs_002", typed.sessionId());
+        assertEquals("cus_cs_002", typed.customerId());
+        assertEquals("pi_cs_002", typed.paymentIntentId());
+        assertEquals("payment", typed.mode());
+        assertEquals("org_002", typed.metadata().get("orgId"));
     }
 
     // --- invoice.payment_succeeded ---

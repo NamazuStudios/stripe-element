@@ -1,0 +1,7 @@
+# Local development attribute overrides
+# Copy this file to debug/local.properties (gitignored) and fill in your values.
+# These properties override @ElementDefaultAttribute defaults and assign @ElementRequiredAttributes at runtime.
+
+# Stripe Credentials
+dev.getelements.elements.stripe.api.key=sk_YOUR_KEY
+dev.getelements.elements.stripe.webhook.secret=whsec_YOUR_SECRET

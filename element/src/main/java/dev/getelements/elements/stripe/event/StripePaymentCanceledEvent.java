@@ -6,19 +6,18 @@ import dev.getelements.elements.stripe.StripeEvents;
 import java.util.Arrays;
 import java.util.List;
 
-public record StripePaymentFailedEvent(
+public record StripePaymentCanceledEvent(
         String paymentIntentId,
-        String failureMessage,
         String customerId) implements Event {
 
     @Override
     public String getEventName() {
-        return StripeEvents.PAYMENT_FAILED;
+        return StripeEvents.PAYMENT_CANCELED;
     }
 
     @Override
     public List<Object> getEventArguments() {
-        return Arrays.asList(paymentIntentId, failureMessage, customerId);
+        return Arrays.asList(paymentIntentId, customerId);
     }
 
 }

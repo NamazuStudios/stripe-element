@@ -4,7 +4,10 @@ import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.Invoice;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.PaymentMethod;
+import com.stripe.model.SetupIntent;
 import com.stripe.model.Subscription;
+import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
 import dev.getelements.elements.sdk.Element;
 import dev.getelements.elements.sdk.ElementSupplier;
@@ -15,7 +18,11 @@ import dev.getelements.elements.stripe.event.StripeInvoicePaymentFailedEvent;
 import dev.getelements.elements.stripe.event.StripeInvoicePaymentSucceededEvent;
 import dev.getelements.elements.stripe.event.StripePaymentFailedEvent;
 import dev.getelements.elements.stripe.event.StripePaymentSucceededEvent;
+import dev.getelements.elements.stripe.event.StripeCheckoutSessionCompletedEvent;
 import dev.getelements.elements.stripe.event.StripeRawEvent;
+import dev.getelements.elements.stripe.event.StripePaymentCanceledEvent;
+import dev.getelements.elements.stripe.event.StripePaymentMethodAttachedEvent;
+import dev.getelements.elements.stripe.event.StripeSetupIntentSucceededEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCancelledEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionCreatedEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionTrialWillEndEvent;
@@ -47,6 +54,9 @@ import static dev.getelements.elements.stripe.StripeApplication.OPENAPI_TAG;
         value = StripeEvents.PAYMENT_FAILED,
         description = "Published when a Stripe payment_intent.payment_failed webhook is received.")
 @ElementEventProducer(
+        value = StripeEvents.PAYMENT_CANCELED,
+        description = "Published when a Stripe payment_intent.canceled webhook is received.")
+@ElementEventProducer(
         value = StripeEvents.INVOICE_PAYMENT_SUCCEEDED,
         description = "Published when a Stripe invoice.payment_succeeded webhook is received.")
 @ElementEventProducer(
@@ -64,6 +74,15 @@ import static dev.getelements.elements.stripe.StripeApplication.OPENAPI_TAG;
 @ElementEventProducer(
         value = StripeEvents.SUBSCRIPTION_TRIAL_WILL_END,
         description = "Published when a Stripe customer.subscription.trial_will_end webhook is received.")
+@ElementEventProducer(
+        value = StripeEvents.SETUP_INTENT_SUCCEEDED,
+        description = "Published when a Stripe setup_intent.succeeded webhook is received.")
+@ElementEventProducer(
+        value = StripeEvents.PAYMENT_METHOD_ATTACHED,
+        description = "Published when a Stripe payment_method.attached webhook is received.")
+@ElementEventProducer(
+        value = StripeEvents.CHECKOUT_SESSION_COMPLETED,
+        description = "Published when a Stripe checkout.session.completed webhook is received.")
 @ElementEventProducer(
         value = StripeEvents.RAW_WEBHOOK,
         description = "Published for every verified Stripe webhook, regardless of type.")
@@ -140,7 +159,8 @@ public class StripeWebhookEndpoint {
                 element.publish(new StripePaymentSucceededEvent(
                         pi.getId(),
                         pi.getAmount(),
-                        pi.getCurrency()
+                        pi.getCurrency(),
+                        pi.getCustomer()
                 ));
 
                 final var piMeta = pi.getMetadata();
@@ -157,7 +177,15 @@ public class StripeWebhookEndpoint {
                         ? pi.getLastPaymentError().getMessage()
                         : "Unknown failure";
 
-                element.publish(new StripePaymentFailedEvent(pi.getId(), failureMessage));
+                element.publish(new StripePaymentFailedEvent(pi.getId(), failureMessage, pi.getCustomer()));
+            }
+
+            case StripeEvents.PAYMENT_CANCELED -> {
+
+                final var pi = (PaymentIntent)
+                        event.getDataObjectDeserializer().getObject().orElseThrow();
+
+                element.publish(new StripePaymentCanceledEvent(pi.getId(), pi.getCustomer()));
             }
 
             case StripeEvents.INVOICE_PAYMENT_SUCCEEDED -> {
@@ -250,6 +278,37 @@ public class StripeWebhookEndpoint {
                         sub.getCustomer(),
                         trialEnd,
                         meta != null ? meta.get(StripeService.METADATA_ORG_ID) : null
+                ));
+            }
+
+            case StripeEvents.SETUP_INTENT_SUCCEEDED -> {
+
+                final var si = (SetupIntent)
+                        event.getDataObjectDeserializer().getObject().orElseThrow();
+
+                element.publish(new StripeSetupIntentSucceededEvent(si.getId(), si.getCustomer()));
+            }
+
+            case StripeEvents.PAYMENT_METHOD_ATTACHED -> {
+
+                final var pm = (PaymentMethod)
+                        event.getDataObjectDeserializer().getObject().orElseThrow();
+
+                element.publish(new StripePaymentMethodAttachedEvent(pm.getId(), pm.getCustomer()));
+            }
+
+            case StripeEvents.CHECKOUT_SESSION_COMPLETED -> {
+
+                final var session = (Session)
+                        event.getDataObjectDeserializer().getObject().orElseThrow();
+
+                element.publish(new StripeCheckoutSessionCompletedEvent(
+                        session.getId(),
+                        session.getCustomer(),
+                        session.getPaymentIntent(),
+                        session.getSubscription(),
+                        session.getMode(),
+                        session.getMetadata()
                 ));
             }
 

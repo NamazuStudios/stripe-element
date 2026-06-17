@@ -20,6 +20,18 @@ public final class StripeEvents {
     public static final String SUBSCRIPTION_CANCELLED      = "customer.subscription.deleted";
     public static final String SUBSCRIPTION_TRIAL_WILL_END = "customer.subscription.trial_will_end";
 
+    /** Published when a Stripe payment_intent.canceled webhook is received. */
+    public static final String PAYMENT_CANCELED          = "payment_intent.canceled";
+
+    /** Published when a Stripe setup_intent.succeeded webhook is received. */
+    public static final String SETUP_INTENT_SUCCEEDED    = "setup_intent.succeeded";
+
+    /** Published when a Stripe payment_method.attached webhook is received. */
+    public static final String PAYMENT_METHOD_ATTACHED   = "payment_method.attached";
+
+    /** Published when a Stripe checkout.session.completed webhook is received. */
+    public static final String CHECKOUT_SESSION_COMPLETED = "checkout.session.completed";
+
     /** Published for every verified Stripe webhook regardless of type. */
     public static final String RAW_WEBHOOK = "stripe.webhook";
 

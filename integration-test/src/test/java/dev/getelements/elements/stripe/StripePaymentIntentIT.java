@@ -6,6 +6,7 @@ import dev.getelements.elements.sdk.dao.Transaction;
 import dev.getelements.elements.sdk.model.user.User;
 import dev.getelements.elements.sdk.service.user.UserService;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
+import dev.getelements.elements.stripe.service.StripePriceCache;
 import dev.getelements.elements.stripe.service.StripeServiceImpl;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -33,13 +34,13 @@ public class StripePaymentIntentIT {
         when(userService.getCurrentUser()).thenReturn(user);
         final Transaction transaction = mock(Transaction.class);
         doAnswer(inv -> null).when(transaction).performAndCloseV(any());
-        return new StripeServiceImpl(new LiveStripeGateway(), userService, () -> transaction);
+        return new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), () -> userService, () -> transaction);
     }
 
     @Test
     void createPaymentIntent_succeeds() throws StripeException {
 
-        final var request = new CreatePaymentIntentRequest(1000L, "usd", null);
+        final var request = CreatePaymentIntentRequest.of(1000L, "usd", null);
         final var response = service().createPaymentIntent(request);
 
         assertNotNull(response.clientSecret());
@@ -50,7 +51,7 @@ public class StripePaymentIntentIT {
     @Test
     void createPaymentIntent_invalidCurrency_throws() {
 
-        final var request = new CreatePaymentIntentRequest(1000L, "XXX", null);
+        final var request = CreatePaymentIntentRequest.of(1000L, "XXX", null);
 
         assertThrows(jakarta.ws.rs.InternalServerErrorException.class,
                 () -> service().createPaymentIntent(request));

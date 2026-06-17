@@ -2,6 +2,7 @@ package dev.getelements.elements.stripe;
 
 import com.fasterxml.jackson.jakarta.rs.json.JacksonJsonProvider;
 import dev.getelements.elements.sdk.annotation.ElementDefaultAttribute;
+import dev.getelements.elements.sdk.annotation.ElementRequiredAttribute;
 import dev.getelements.elements.sdk.annotation.ElementServiceExport;
 import dev.getelements.elements.sdk.annotation.ElementServiceImplementation;
 import dev.getelements.elements.stripe.rest.StripeConfigEndpoint;
@@ -22,11 +23,14 @@ public class StripeApplication extends Application {
     @ElementDefaultAttribute("/element/stripe/api")
     public static final String RS_ROOT = "dev.getelements.elements.element.rs.root";
 
-    @ElementDefaultAttribute("")
+    @ElementRequiredAttribute(sensitive = true)
     public static final String STRIPE_API_KEY = "dev.getelements.elements.stripe.api.key";
 
-    @ElementDefaultAttribute("")
+    @ElementRequiredAttribute(sensitive = true)
     public static final String STRIPE_WEBHOOK_SECRET = "dev.getelements.elements.stripe.webhook.secret";
+
+    @ElementDefaultAttribute("300000")
+    public static final String PRICE_CACHE_TTL_MS = "dev.getelements.elements.stripe.price.cache.ttl.ms";
 
     public static final String OPENAPI_TAG = "Stripe";
 

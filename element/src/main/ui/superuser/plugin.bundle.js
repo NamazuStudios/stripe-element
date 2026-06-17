@@ -5,7 +5,7 @@
     var _a2;
     const token = (_a2 = window.__elementsApiClient) == null ? void 0 : _a2.getSessionToken();
     const headers = { "Content-Type": "application/json", ...extra };
-    if (token) headers["session_secret"] = token;
+    if (token) headers["Elements-SessionSecret"] = token;
     return headers;
   }
   function defaultLimit() {

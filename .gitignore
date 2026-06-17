@@ -58,3 +58,5 @@ build/
 /cdn-repos/**
 /script-repos/**
 
+## Local development credentials (never commit)
+debug/local.properties
