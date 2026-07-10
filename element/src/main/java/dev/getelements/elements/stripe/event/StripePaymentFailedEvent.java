@@ -3,7 +3,6 @@ package dev.getelements.elements.stripe.event;
 import dev.getelements.elements.sdk.Event;
 import dev.getelements.elements.stripe.StripeEvents;
 
-import java.util.Arrays;
 import java.util.List;
 
 public record StripePaymentFailedEvent(
@@ -18,7 +17,7 @@ public record StripePaymentFailedEvent(
 
     @Override
     public List<Object> getEventArguments() {
-        return Arrays.asList(paymentIntentId, failureMessage, customerId);
+        return List.of(paymentIntentId, failureMessage);
     }
 
 }

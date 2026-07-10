@@ -3,7 +3,6 @@ package dev.getelements.elements.stripe.event;
 import dev.getelements.elements.sdk.Event;
 import dev.getelements.elements.stripe.StripeEvents;
 
-import java.util.Arrays;
 import java.util.List;
 
 public record StripeSubscriptionTrialWillEndEvent(
@@ -19,7 +18,7 @@ public record StripeSubscriptionTrialWillEndEvent(
 
     @Override
     public List<Object> getEventArguments() {
-        return Arrays.asList(subscriptionId, customerId, trialEnd, orgId);
+        return List.of(subscriptionId, customerId);
     }
 
 }

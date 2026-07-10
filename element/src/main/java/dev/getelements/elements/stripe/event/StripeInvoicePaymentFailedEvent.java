@@ -18,7 +18,7 @@ public record StripeInvoicePaymentFailedEvent(
 
     @Override
     public List<Object> getEventArguments() {
-        return List.of(invoiceId, subscriptionId, customerId, failureMessage);
+        return List.of(invoiceId, customerId, failureMessage);
     }
 
 }

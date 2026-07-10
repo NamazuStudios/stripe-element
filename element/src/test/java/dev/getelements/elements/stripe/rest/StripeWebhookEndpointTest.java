@@ -122,6 +122,31 @@ class StripeWebhookEndpointTest {
         assertEquals("evt_unknown_1", raw.eventId());
     }
 
+    // --- API version mismatch (deserializeUnsafe path) ---
+
+    @Test
+    void futureApiVersion_stillPublishesTypedEvent() throws Exception {
+
+        // Stripe sends events with its current API version, which may be newer than
+        // the SDK version pinned in this library. getObject() returns empty in that
+        // case; deserializeUnsafe() bypasses the check and should still succeed.
+        final String payload = """
+                {"id":"evt_future_1","object":"event","api_version":"2099-01-01",
+                 "created":1234567890,"livemode":false,
+                 "type":"payment_intent.succeeded",
+                 "data":{"object":{"id":"pi_future","object":"payment_intent",
+                 "amount":1500,"currency":"usd","status":"succeeded",
+                 "customer":"cus_future","metadata":{}}}}""";
+
+        final var response = endpoint.receiveWebhook(payload, sig(payload));
+
+        assertEquals(200, response.getStatus());
+        final var typed = assertSingleTyped(captureAllPublished(), StripePaymentSucceededEvent.class);
+        assertEquals("pi_future", typed.paymentIntentId());
+        assertEquals(1500L, typed.amount());
+        assertEquals("cus_future", typed.customerId());
+    }
+
     // --- payment_intent.succeeded ---
 
     @Test

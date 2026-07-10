@@ -3,7 +3,6 @@ package dev.getelements.elements.stripe.event;
 import dev.getelements.elements.sdk.Event;
 import dev.getelements.elements.stripe.StripeEvents;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -31,7 +30,7 @@ public record StripeCheckoutSessionCompletedEvent(
 
     @Override
     public List<Object> getEventArguments() {
-        return Arrays.asList(sessionId, customerId, paymentIntentId, subscriptionId, mode, metadata);
+        return List.of(sessionId, customerId, mode);
     }
 
 }

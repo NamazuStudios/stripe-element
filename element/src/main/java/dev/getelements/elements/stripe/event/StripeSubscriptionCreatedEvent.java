@@ -3,7 +3,7 @@ package dev.getelements.elements.stripe.event;
 import dev.getelements.elements.sdk.Event;
 import dev.getelements.elements.stripe.StripeEvents;
 
-import java.util.Arrays;
+
 import java.util.List;
 
 public record StripeSubscriptionCreatedEvent(
@@ -19,7 +19,7 @@ public record StripeSubscriptionCreatedEvent(
 
     @Override
     public List<Object> getEventArguments() {
-        return Arrays.asList(subscriptionId, customerId, status, orgId);
+        return List.of(subscriptionId, customerId, status);
     }
 
 }

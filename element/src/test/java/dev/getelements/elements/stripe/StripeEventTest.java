@@ -26,13 +26,14 @@ class StripeEventTest {
     @Test
     void paymentSucceeded_arguments() {
         final var event = new StripePaymentSucceededEvent("pi_001", 1000L, "usd", "cus_001");
-        assertEquals(Arrays.asList("pi_001", 1000L, "usd", "cus_001"), event.getEventArguments());
+        assertEquals(Arrays.asList("pi_001", 1000L, "usd"), event.getEventArguments());
     }
 
     @Test
-    void paymentSucceeded_nullCustomerId_includedInArguments() {
+    void paymentSucceeded_customerIdAccessibleAsComponent() {
         final var event = new StripePaymentSucceededEvent("pi_002", 500L, "usd", null);
-        assertEquals(Arrays.asList("pi_002", 500L, "usd", null), event.getEventArguments());
+        assertNull(event.customerId());
+        assertEquals(Arrays.asList("pi_002", 500L, "usd"), event.getEventArguments());
     }
 
     @Test
@@ -45,14 +46,14 @@ class StripeEventTest {
     @Test
     void paymentFailed_arguments() {
         final var event = new StripePaymentFailedEvent("pi_002", "card declined", "cus_002");
-        assertEquals(Arrays.asList("pi_002", "card declined", "cus_002"), event.getEventArguments());
+        assertEquals(Arrays.asList("pi_002", "card declined"), event.getEventArguments());
     }
 
     @Test
     void paymentCanceled_arguments() {
         final var event = new StripePaymentCanceledEvent("pi_003", "cus_003");
         assertEquals(StripeEvents.PAYMENT_CANCELED, event.getEventName());
-        assertEquals(Arrays.asList("pi_003", "cus_003"), event.getEventArguments());
+        assertEquals(List.of("pi_003"), event.getEventArguments());
     }
 
     @Test
@@ -65,13 +66,14 @@ class StripeEventTest {
     @Test
     void subscriptionCreated_arguments() {
         final var event = new StripeSubscriptionCreatedEvent("sub_001", "cus_001", "active", "org_001");
-        assertEquals(Arrays.asList("sub_001", "cus_001", "active", "org_001"), event.getEventArguments());
+        assertEquals(Arrays.asList("sub_001", "cus_001", "active"), event.getEventArguments());
     }
 
     @Test
-    void subscriptionCreated_nullOrgId_includedInArguments() {
+    void subscriptionCreated_orgIdAccessibleAsComponent() {
         final var event = new StripeSubscriptionCreatedEvent("sub_002", "cus_002", "active", null);
-        assertEquals(Arrays.asList("sub_002", "cus_002", "active", null), event.getEventArguments());
+        assertNull(event.orgId());
+        assertEquals(Arrays.asList("sub_002", "cus_002", "active"), event.getEventArguments());
     }
 
     @Test
@@ -84,7 +86,7 @@ class StripeEventTest {
     @Test
     void subscriptionCancelled_arguments() {
         final var event = new StripeSubscriptionCancelledEvent("sub_003", "cus_003", "org_003");
-        assertEquals(Arrays.asList("sub_003", "cus_003", "org_003"), event.getEventArguments());
+        assertEquals(Arrays.asList("sub_003", "cus_003"), event.getEventArguments());
     }
 
     @Test
@@ -93,8 +95,17 @@ class StripeEventTest {
         final var event = new StripeCheckoutSessionCompletedEvent(
                 "cs_001", "cus_001", "pi_001", null, "payment", meta);
         assertEquals(StripeEvents.CHECKOUT_SESSION_COMPLETED, event.getEventName());
-        assertEquals(Arrays.asList("cs_001", "cus_001", "pi_001", null, "payment", meta),
-                event.getEventArguments());
+        assertEquals(Arrays.asList("cs_001", "cus_001", "payment"), event.getEventArguments());
+    }
+
+    @Test
+    void checkoutSessionCompleted_nullableFieldsAccessibleAsComponents() {
+        final var meta = Map.of("orgId", "org_001");
+        final var event = new StripeCheckoutSessionCompletedEvent(
+                "cs_001", "cus_001", "pi_001", null, "payment", meta);
+        assertEquals("pi_001", event.paymentIntentId());
+        assertNull(event.subscriptionId());
+        assertEquals(meta, event.metadata());
     }
 
 }

@@ -1,5 +1,6 @@
 package dev.getelements.elements.stripe.rest;
 
+import com.stripe.exception.EventDataObjectDeserializationException;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.model.Event;
 import com.stripe.model.Invoice;
@@ -149,12 +150,24 @@ public class StripeWebhookEndpoint {
         element.publish(new StripeRawEvent(event.getType(), event.getId(), payload));
         eventLogService.logEvent(event.getId(), event.getType());
 
+        try {
+            dispatchTypedEvent(event);
+        } catch (EventDataObjectDeserializationException e) {
+            // API version mismatch between this SDK and the incoming event — raw event was
+            // already published above so consumers relying on RAW_WEBHOOK still fire.
+            return Response.ok("{\"received\":true,\"typed\":false}").build();
+        }
+
+        return Response.ok("{\"received\":true}").build();
+    }
+
+    private void dispatchTypedEvent(Event event) throws EventDataObjectDeserializationException {
+
         switch (event.getType()) {
 
             case StripeEvents.PAYMENT_SUCCEEDED -> {
 
-                final var pi = (PaymentIntent)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var pi = (PaymentIntent) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 element.publish(new StripePaymentSucceededEvent(
                         pi.getId(),
@@ -170,8 +183,7 @@ public class StripeWebhookEndpoint {
 
             case StripeEvents.PAYMENT_FAILED -> {
 
-                final var pi = (PaymentIntent)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var pi = (PaymentIntent) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 final var failureMessage = pi.getLastPaymentError() != null
                         ? pi.getLastPaymentError().getMessage()
@@ -182,16 +194,14 @@ public class StripeWebhookEndpoint {
 
             case StripeEvents.PAYMENT_CANCELED -> {
 
-                final var pi = (PaymentIntent)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var pi = (PaymentIntent) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 element.publish(new StripePaymentCanceledEvent(pi.getId(), pi.getCustomer()));
             }
 
             case StripeEvents.INVOICE_PAYMENT_SUCCEEDED -> {
 
-                final var invoice = (Invoice)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var invoice = (Invoice) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 element.publish(new StripeInvoicePaymentSucceededEvent(
                         invoice.getId(),
@@ -207,8 +217,7 @@ public class StripeWebhookEndpoint {
 
             case StripeEvents.INVOICE_PAYMENT_FAILED -> {
 
-                final var invoice = (Invoice)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var invoice = (Invoice) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 final var failureMessage = invoice.getLastFinalizationError() != null
                         ? invoice.getLastFinalizationError().getMessage()
@@ -224,8 +233,7 @@ public class StripeWebhookEndpoint {
 
             case StripeEvents.SUBSCRIPTION_CREATED -> {
 
-                final var sub = (Subscription)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var sub = (Subscription) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 final var meta = sub.getMetadata();
                 element.publish(new StripeSubscriptionCreatedEvent(
@@ -238,8 +246,7 @@ public class StripeWebhookEndpoint {
 
             case StripeEvents.SUBSCRIPTION_UPDATED -> {
 
-                final var sub = (Subscription)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var sub = (Subscription) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 final var meta = sub.getMetadata();
                 element.publish(new StripeSubscriptionUpdatedEvent(
@@ -252,8 +259,7 @@ public class StripeWebhookEndpoint {
 
             case StripeEvents.SUBSCRIPTION_CANCELLED -> {
 
-                final var sub = (Subscription)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var sub = (Subscription) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 final var meta = sub.getMetadata();
                 element.publish(new StripeSubscriptionCancelledEvent(
@@ -265,8 +271,7 @@ public class StripeWebhookEndpoint {
 
             case StripeEvents.SUBSCRIPTION_TRIAL_WILL_END -> {
 
-                final var sub = (Subscription)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var sub = (Subscription) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 final var meta = sub.getMetadata();
                 final var trialEnd = sub.getTrialEnd() != null
@@ -283,24 +288,21 @@ public class StripeWebhookEndpoint {
 
             case StripeEvents.SETUP_INTENT_SUCCEEDED -> {
 
-                final var si = (SetupIntent)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var si = (SetupIntent) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 element.publish(new StripeSetupIntentSucceededEvent(si.getId(), si.getCustomer()));
             }
 
             case StripeEvents.PAYMENT_METHOD_ATTACHED -> {
 
-                final var pm = (PaymentMethod)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var pm = (PaymentMethod) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 element.publish(new StripePaymentMethodAttachedEvent(pm.getId(), pm.getCustomer()));
             }
 
             case StripeEvents.CHECKOUT_SESSION_COMPLETED -> {
 
-                final var session = (Session)
-                        event.getDataObjectDeserializer().getObject().orElseThrow();
+                final var session = (Session) event.getDataObjectDeserializer().deserializeUnsafe();
 
                 element.publish(new StripeCheckoutSessionCompletedEvent(
                         session.getId(),
@@ -314,8 +316,6 @@ public class StripeWebhookEndpoint {
 
             default -> { /* unhandled event type — raw event already published above */ }
         }
-
-        return Response.ok("{\"received\":true}").build();
     }
 
 }
