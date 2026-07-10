@@ -14,6 +14,7 @@
     <artifactId>integration-test</artifactId>
     <version>1.0.2-SNAPSHOT</version>
     <name>Stripe Element Integration Tests</name>
+    <url>https://github.com/NamazuStudios/stripe-element</url>
 
     <dependencies>
         <dependency>

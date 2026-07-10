@@ -15,6 +15,7 @@
     <artifactId>debug</artifactId>
     <version>1.0.2-SNAPSHOT</version>
     <name>debug</name>
+    <url>https://github.com/NamazuStudios/stripe-element</url>
 
     <!--
         Only include the local runtime and never include your pom. The LocalSDK is just a way to run Namazu Elements is

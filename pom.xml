@@ -11,6 +11,29 @@
 
     <name>Stripe Element</name>
     <description>Namazu Elements integration for Stripe payment processing</description>
+    <url>https://github.com/NamazuStudios/stripe-element</url>
+
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://github.com/NamazuStudios/stripe-element/blob/main/LICENSE</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <scm>
+        <connection>scm:git:git@github.com:NamazuStudios/stripe-element.git</connection>
+        <developerConnection>scm:git:git@github.com:NamazuStudios/stripe-element.git</developerConnection>
+        <url>https://github.com/NamazuStudios/stripe-element</url>
+    </scm>
+
+    <developers>
+        <developer>
+            <name>Namazu Studios</name>
+            <organization>Namazu Studios LLC</organization>
+            <organizationUrl>https://namazustudios.com</organizationUrl>
+        </developer>
+    </developers>
 
     <modules>
         <module>api</module>
@@ -77,6 +100,18 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <!-- Source Jars - generated in all builds so IDEs, dependents, and Maven Central have sources available -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+            </plugin>
+            <!-- Javadoc Jars - generated in all builds so IDEs, dependents, and Maven Central have documentation available -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+            </plugin>
+        </plugins>
     </build>
 
     <!--

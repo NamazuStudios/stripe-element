@@ -13,6 +13,9 @@
     <artifactId>element</artifactId>
     <version>1.0.2-SNAPSHOT</version>
 
+    <name>Stripe Element Implementation</name>
+    <url>https://github.com/NamazuStudios/stripe-element</url>
+
     <!--
         This includes a variety of dependencies which the Element uses. An Element may use some or all of these. Note
         that we do not specify version, nor do we specify the scope. By including the bom in the parent project,

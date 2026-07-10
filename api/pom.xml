@@ -16,6 +16,7 @@
 
   <name>Stripe Element API</name>
   <description>SDK interfaces and DTOs for the Stripe payment processing Element</description>
+  <url>https://github.com/NamazuStudios/stripe-element</url>
 
   <build>
     <plugins>

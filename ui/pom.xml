@@ -22,6 +22,7 @@
         Activate with: mvn install -Pbuild-ui
         Not active by default — run npm scripts in ui/ directly during development.
     </description>
+    <url>https://github.com/NamazuStudios/stripe-element</url>
 
     <profiles>
         <profile>
