@@ -7,11 +7,11 @@
     <parent>
         <groupId>dev.getelements.elements.stripe</groupId>
         <artifactId>stripe</artifactId>
-        <version>1.0.2</version>
+        <version>1.0.3-SNAPSHOT</version>
     </parent>
 
     <artifactId>element</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.3-SNAPSHOT</version>
 
     <name>Stripe Element Implementation</name>
     <url>https://github.com/NamazuStudios/stripe-element</url>
