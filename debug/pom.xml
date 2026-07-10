@@ -8,12 +8,12 @@
     <parent>
         <groupId>dev.getelements.elements.stripe</groupId>
         <artifactId>stripe</artifactId>
-        <version>1.0.2-SNAPSHOT</version>
+        <version>1.0.2</version>
     </parent>
 
     <groupId>dev.getelements.elements.stripe</groupId>
     <artifactId>debug</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.2</version>
     <name>debug</name>
     <url>https://github.com/NamazuStudios/stripe-element</url>
 
