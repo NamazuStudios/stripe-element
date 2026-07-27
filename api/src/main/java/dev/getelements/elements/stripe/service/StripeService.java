@@ -8,6 +8,7 @@ import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
+import dev.getelements.elements.stripe.model.MeterSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
@@ -121,6 +122,16 @@ public interface StripeService {
      * @param priceId Stripe price ID ({@code price_...})
      */
     PriceSummary retrievePrice(String priceId);
+
+    /**
+     * Lists Billing Meters from the Stripe account. A meter's {@link MeterSummary#eventName()} is
+     * the value catalogue configuration (e.g. a metered SKU's meter event name) should store to
+     * associate a billable unit with usage recorded via {@link #recordMeterEvent}.
+     *
+     * @param activeOnly if {@code true}, only active meters are returned
+     * @param limit      maximum number of meters to return (1–100)
+     */
+    List<MeterSummary> listMeters(boolean activeOnly, int limit);
 
     /**
      * Searches for a Stripe customer by a metadata key-value pair using the Stripe Customer Search API.

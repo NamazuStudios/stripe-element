@@ -14,6 +14,8 @@ import com.stripe.model.ProductCollection;
 import com.stripe.model.SetupIntent;
 import com.stripe.model.Subscription;
 import com.stripe.model.SubscriptionCollection;
+import com.stripe.model.billing.Meter;
+import com.stripe.model.billing.MeterCollection;
 import com.stripe.model.billing.MeterEvent;
 import com.stripe.model.billingportal.Session;
 import com.stripe.net.RequestOptions;
@@ -30,6 +32,7 @@ import com.stripe.param.SubscriptionCancelParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.billing.MeterEventCreateParams;
+import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 import dev.getelements.elements.stripe.service.StripeGateway;
 
@@ -114,6 +117,11 @@ class LiveStripeGateway implements StripeGateway {
     @Override
     public Price retrievePrice(String priceId) throws StripeException {
         return Price.retrieve(priceId);
+    }
+
+    @Override
+    public MeterCollection listMeters(MeterListParams params) throws StripeException {
+        return Meter.list(params);
     }
 
     @Override

@@ -11,6 +11,7 @@ import com.stripe.param.PriceListParams;
 import com.stripe.param.ProductListParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.billing.MeterEventCreateParams;
+import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
@@ -30,6 +31,7 @@ import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
+import dev.getelements.elements.stripe.model.MeterSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
@@ -346,6 +348,26 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
+    public List<MeterSummary> listMeters(boolean activeOnly, int limit) {
+
+        try {
+
+            final var builder = MeterListParams.builder().setLimit((long) limit);
+
+            if (activeOnly) {
+                builder.setStatus(MeterListParams.Status.ACTIVE);
+            }
+
+            return gateway.listMeters(builder.build()).getData().stream()
+                    .map(this::mapMeter)
+                    .toList();
+
+        } catch (StripeException e) {
+            throw stripeError(e);
+        }
+    }
+
+    @Override
     public Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue) {
 
         try {
@@ -501,6 +523,14 @@ public class StripeServiceImpl implements StripeService {
                 price.getCurrency(),
                 price.getType(),
                 recurring != null ? recurring.getInterval() : null);
+    }
+
+    private MeterSummary mapMeter(com.stripe.model.billing.Meter meter) {
+        return new MeterSummary(
+                meter.getId(),
+                meter.getDisplayName(),
+                meter.getEventName(),
+                meter.getStatus());
     }
 
 }

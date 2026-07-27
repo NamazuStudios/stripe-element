@@ -15,6 +15,7 @@ import com.stripe.model.ProductCollection;
 import com.stripe.model.SetupIntent;
 import com.stripe.model.Subscription;
 import com.stripe.model.SubscriptionCollection;
+import com.stripe.model.billing.MeterCollection;
 import com.stripe.model.billing.MeterEvent;
 import com.stripe.model.billingportal.Session;
 import com.stripe.param.CustomerCreateParams;
@@ -30,6 +31,7 @@ import com.stripe.param.SubscriptionCancelParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.billing.MeterEventCreateParams;
+import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 
 public interface StripeGateway {
@@ -61,6 +63,8 @@ public interface StripeGateway {
     PriceCollection listPrices(PriceListParams params) throws StripeException;
 
     Price retrievePrice(String priceId) throws StripeException;
+
+    MeterCollection listMeters(MeterListParams params) throws StripeException;
 
     CustomerSearchResult searchCustomers(CustomerSearchParams params) throws StripeException;
 
