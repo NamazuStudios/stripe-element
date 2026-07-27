@@ -167,15 +167,24 @@ stripe listen --forward-to localhost:8080/element/stripe/api/stripe/webhook
 
 ## Integration Tests
 
-Integration tests require a Stripe test-mode API key:
+Integration tests require a Stripe test-mode API key, sourced from environment variables so CI can inject them as secrets:
+
+| Env var | Maven property | Purpose |
+|---------|----------------|---------|
+| `STRIPE_TEST_API_KEY` | `stripe.test.apiKey` | Stripe test-mode secret key |
+| `STRIPE_TEST_WEBHOOK_SECRET` | `stripe.test.webhookSecret` | Webhook signing secret |
+| `STRIPE_TEST_CUSTOMER_ID` | `stripe.test.customerId` | Existing test-mode customer to reuse |
+| `STRIPE_TEST_PRICE_ID` | `stripe.test.priceId` | Existing test-mode price to reuse |
 
 ```bash
-mvn verify -pl integration-test \
-  -Dstripe.test.apiKey=sk_test_YOUR_KEY \
-  -Dstripe.test.webhookSecret=whsec_YOUR_SECRET
+export STRIPE_TEST_API_KEY=sk_test_YOUR_KEY
+export STRIPE_TEST_WEBHOOK_SECRET=whsec_YOUR_SECRET
+mvn verify -pl integration-test
 ```
 
-Subscription tests create and tear down a real subscription automatically. Optionally supply `-Dstripe.test.priceId=price_...` to reuse an existing test-mode price instead of creating a new Product + Price each run.
+Each variable can still be overridden per-run with the matching `-Dstripe.test.*` system property (e.g. `-Dstripe.test.apiKey=sk_test_OTHER_KEY`).
+
+Subscription tests create and tear down a real subscription automatically. Optionally set `STRIPE_TEST_PRICE_ID` (or `-Dstripe.test.priceId=price_...`) to reuse an existing test-mode price instead of creating a new Product + Price each run.
 
 Webhook signature tests (`StripeWebhookSignatureIT`) run without a network connection.
 

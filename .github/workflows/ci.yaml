@@ -30,4 +30,9 @@ jobs:
           cache: maven
 
       - name: Build and verify
+        env:
+          STRIPE_TEST_API_KEY: ${{ secrets.STRIPE_TEST_API_KEY }}
+          STRIPE_TEST_WEBHOOK_SECRET: ${{ secrets.STRIPE_TEST_WEBHOOK_SECRET }}
+          STRIPE_TEST_CUSTOMER_ID: ${{ secrets.STRIPE_TEST_CUSTOMER_ID }}
+          STRIPE_TEST_PRICE_ID: ${{ secrets.STRIPE_TEST_PRICE_ID }}
         run: mvn -B --no-transfer-progress verify
