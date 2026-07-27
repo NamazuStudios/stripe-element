@@ -57,6 +57,15 @@ public interface StripeService {
     List<PaymentMethodSummary> listPaymentMethods(String customerId);
 
     /**
+     * Checks whether {@code customerId} has at least one payment method on file, without
+     * materializing the full list. Prefer this over {@code !listPaymentMethods(customerId).isEmpty()}
+     * for billing-readiness checks that only need a boolean.
+     *
+     * @param customerId Stripe customer ID
+     */
+    boolean hasPaymentMethod(String customerId);
+
+    /**
      * Creates a Stripe PaymentIntent for a <strong>one-off purchase</strong> and returns the
      * client secret. The frontend passes this secret to Stripe.js ({@code stripe.confirmCardPayment})
      * to complete the charge. For recurring charges use {@link #createSubscription} instead.
@@ -102,6 +111,17 @@ public interface StripeService {
      * @param limit      maximum number of products to return (1–100)
      */
     List<ProductSummary> listProducts(boolean activeOnly, int limit);
+
+    /**
+     * Retrieves a single Stripe product by its ID, including its default price. Returns
+     * {@link Optional#empty()} if no product with that ID exists (rather than throwing), so callers
+     * that already treat a missing product as a normal (if unwanted) precondition failure don't need
+     * to catch an exception. Prefer this over paging through {@link #listProducts} and filtering by
+     * ID — it also avoids missing a product that falls outside the requested page.
+     *
+     * @param productId Stripe product ID ({@code prod_...})
+     */
+    Optional<ProductSummary> getProduct(String productId);
 
     /**
      * Lists prices from the Stripe product catalogue. Results are cached in memory for
@@ -180,6 +200,7 @@ public interface StripeService {
      * @param eventName      meter name as configured in the Stripe Dashboard
      * @param value          usage quantity to report (must be &gt; 0)
      * @param idempotencyKey unique key for this event; re-submitting the same key is a no-op
+     * @throws NoSuchMeterException if Stripe has no active meter configured for {@code eventName}
      */
     void recordMeterEvent(String customerId, String eventName, long value, String idempotencyKey);
 

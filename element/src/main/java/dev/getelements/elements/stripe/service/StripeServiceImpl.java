@@ -51,6 +51,9 @@ public class StripeServiceImpl implements StripeService {
 
     private static final String RECEIPT_SCHEMA = "stripe";
 
+    /** Substring of Stripe's literal error text: {@code No active meter found for event name "<name>".} */
+    private static final String NO_ACTIVE_METER_MESSAGE = "No active meter found for event name";
+
     private final StripeGateway gateway;
     private final StripePriceCache priceCache;
     private final Provider<UserService> userServiceProvider;
@@ -136,6 +139,19 @@ public class StripeServiceImpl implements StripeService {
                                 card != null ? card.getLast4() : null);
                     })
                     .toList();
+
+        } catch (StripeException e) {
+            throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public boolean hasPaymentMethod(String customerId) {
+
+        try {
+
+            final var params = CustomerListPaymentMethodsParams.builder().setLimit(1L).build();
+            return !gateway.listPaymentMethods(customerId, params).getData().isEmpty();
 
         } catch (StripeException e) {
             throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
@@ -292,14 +308,24 @@ public class StripeServiceImpl implements StripeService {
                     .build();
 
             return gateway.listProducts(params).getData().stream()
-                    .map(p -> new ProductSummary(
-                            p.getId(),
-                            p.getName(),
-                            p.getDescription(),
-                            Boolean.TRUE.equals(p.getActive()),
-                            p.getDefaultPriceObject() != null ? mapPrice(p.getDefaultPriceObject()) : null))
+                    .map(this::mapProduct)
                     .toList();
 
+        } catch (StripeException e) {
+            throw stripeError(e);
+        }
+    }
+
+    @Override
+    public Optional<ProductSummary> getProduct(String productId) {
+
+        try {
+            return Optional.of(mapProduct(gateway.retrieveProduct(productId)));
+        } catch (InvalidRequestException e) {
+            if ("resource_missing".equals(e.getCode())) {
+                return Optional.empty();
+            }
+            throw stripeError(e);
         } catch (StripeException e) {
             throw stripeError(e);
         }
@@ -470,6 +496,9 @@ public class StripeServiceImpl implements StripeService {
             gateway.createMeterEvent(params, idempotencyKey);
 
         } catch (StripeException e) {
+            if (e.getMessage() != null && e.getMessage().contains(NO_ACTIVE_METER_MESSAGE)) {
+                throw new NoSuchMeterException(eventName, e.getMessage());
+            }
             throw stripeError(e);
         }
     }
@@ -523,6 +552,15 @@ public class StripeServiceImpl implements StripeService {
                 price.getCurrency(),
                 price.getType(),
                 recurring != null ? recurring.getInterval() : null);
+    }
+
+    private ProductSummary mapProduct(com.stripe.model.Product product) {
+        return new ProductSummary(
+                product.getId(),
+                product.getName(),
+                product.getDescription(),
+                Boolean.TRUE.equals(product.getActive()),
+                product.getDefaultPriceObject() != null ? mapPrice(product.getDefaultPriceObject()) : null);
     }
 
     private MeterSummary mapMeter(com.stripe.model.billing.Meter meter) {

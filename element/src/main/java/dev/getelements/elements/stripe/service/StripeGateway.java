@@ -64,6 +64,8 @@ public interface StripeGateway {
 
     Price retrievePrice(String priceId) throws StripeException;
 
+    Product retrieveProduct(String productId) throws StripeException;
+
     MeterCollection listMeters(MeterListParams params) throws StripeException;
 
     CustomerSearchResult searchCustomers(CustomerSearchParams params) throws StripeException;

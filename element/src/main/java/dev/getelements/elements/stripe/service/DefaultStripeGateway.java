@@ -28,6 +28,7 @@ import com.stripe.param.InvoiceListParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.PriceListParams;
 import com.stripe.param.ProductListParams;
+import com.stripe.param.ProductRetrieveParams;
 import com.stripe.param.SetupIntentCreateParams;
 import com.stripe.param.SubscriptionCancelParams;
 import com.stripe.param.SubscriptionCreateParams;
@@ -114,6 +115,14 @@ public class DefaultStripeGateway implements StripeGateway {
     @Override
     public Price retrievePrice(String priceId) throws StripeException {
         return Price.retrieve(priceId, options());
+    }
+
+    @Override
+    public Product retrieveProduct(String productId) throws StripeException {
+        final var params = ProductRetrieveParams.builder()
+                .addExpand("default_price")
+                .build();
+        return Product.retrieve(productId, params, options());
     }
 
     @Override
