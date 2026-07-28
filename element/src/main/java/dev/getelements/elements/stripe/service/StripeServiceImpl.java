@@ -45,6 +45,7 @@ import jakarta.ws.rs.NotFoundException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @ElementServiceExport(StripeService.class)
 public class StripeServiceImpl implements StripeService {
@@ -384,8 +385,22 @@ public class StripeServiceImpl implements StripeService {
                 builder.setStatus(MeterListParams.Status.ACTIVE);
             }
 
-            return gateway.listMeters(builder.build()).getData().stream()
-                    .map(this::mapMeter)
+            final var meters = gateway.listMeters(builder.build()).getData();
+
+            // Stripe has no "list prices by meter" endpoint, so fetch active recurring prices once
+            // and join in memory by Price.Recurring#getMeter() — one extra round trip instead of one
+            // per meter. Last-write-wins if more than one Price references the same meter.
+            final var priceListParams = PriceListParams.builder()
+                    .setActive(true)
+                    .setType(PriceListParams.Type.RECURRING)
+                    .setLimit(100L)
+                    .build();
+            final var priceByMeterId = gateway.listPrices(priceListParams).getData().stream()
+                    .filter(p -> p.getRecurring() != null && p.getRecurring().getMeter() != null)
+                    .collect(Collectors.toMap(p -> p.getRecurring().getMeter(), this::mapPrice, (a, b) -> b));
+
+            return meters.stream()
+                    .map(m -> mapMeter(m, priceByMeterId.get(m.getId())))
                     .toList();
 
         } catch (StripeException e) {
@@ -563,12 +578,13 @@ public class StripeServiceImpl implements StripeService {
                 product.getDefaultPriceObject() != null ? mapPrice(product.getDefaultPriceObject()) : null);
     }
 
-    private MeterSummary mapMeter(com.stripe.model.billing.Meter meter) {
+    private MeterSummary mapMeter(com.stripe.model.billing.Meter meter, PriceSummary price) {
         return new MeterSummary(
                 meter.getId(),
                 meter.getDisplayName(),
                 meter.getEventName(),
-                meter.getStatus());
+                meter.getStatus(),
+                price);
     }
 
 }
