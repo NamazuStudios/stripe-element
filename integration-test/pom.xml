@@ -19,7 +19,6 @@
     <properties>
         <!-- Defaults sourced from CI-friendly env vars; override with -Dstripe.test.* for local runs. -->
         <stripe.test.apiKey>${env.STRIPE_TEST_API_KEY}</stripe.test.apiKey>
-        <stripe.test.webhookSecret>${env.STRIPE_TEST_WEBHOOK_SECRET}</stripe.test.webhookSecret>
         <stripe.test.customerId>${env.STRIPE_TEST_CUSTOMER_ID}</stripe.test.customerId>
         <stripe.test.priceId>${env.STRIPE_TEST_PRICE_ID}</stripe.test.priceId>
     </properties>
@@ -103,7 +102,6 @@
                 <configuration>
                     <systemPropertyVariables>
                         <stripe.test.apiKey>${stripe.test.apiKey}</stripe.test.apiKey>
-                        <stripe.test.webhookSecret>${stripe.test.webhookSecret}</stripe.test.webhookSecret>
                         <stripe.test.customerId>${stripe.test.customerId}</stripe.test.customerId>
                         <stripe.test.priceId>${stripe.test.priceId}</stripe.test.priceId>
                     </systemPropertyVariables>

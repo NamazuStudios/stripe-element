@@ -5,7 +5,6 @@ import dev.getelements.elements.stripe.rest.StripeWebhookEndpoint;
 import dev.getelements.elements.stripe.service.StripeEventLogService;
 import dev.getelements.elements.stripe.service.StripeService;
 import jakarta.ws.rs.core.Response;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import javax.crypto.Mac;
@@ -13,19 +12,15 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.Mockito.mock;
 
 public class StripeWebhookEndpointIT {
 
-    private static String webhookSecret;
-
-    @BeforeAll
-    static void setUp() {
-        webhookSecret = System.getProperty("stripe.test.webhookSecret");
-        assumeTrue(webhookSecret != null && !webhookSecret.isBlank(),
-                "stripe.test.webhookSecret not provided - skipping webhook endpoint tests");
-    }
+    /**
+     * Not a real Stripe secret - only used as the shared HMAC key between the
+     * signature this test generates and the endpoint under test.
+     */
+    private static final String webhookSecret = "whsec_test_secret_for_unit_testing_only";
 
     private static String buildSignatureHeader(String payload, String secret, long timestamp) throws Exception {
         final var signedPayload = timestamp + "." + payload;

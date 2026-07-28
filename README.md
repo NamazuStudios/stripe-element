@@ -172,13 +172,11 @@ Integration tests require a Stripe test-mode API key, sourced from environment v
 | Env var | Maven property | Purpose |
 |---------|----------------|---------|
 | `STRIPE_TEST_API_KEY` | `stripe.test.apiKey` | Stripe test-mode secret key |
-| `STRIPE_TEST_WEBHOOK_SECRET` | `stripe.test.webhookSecret` | Webhook signing secret |
 | `STRIPE_TEST_CUSTOMER_ID` | `stripe.test.customerId` | Existing test-mode customer to reuse |
 | `STRIPE_TEST_PRICE_ID` | `stripe.test.priceId` | Existing test-mode price to reuse |
 
 ```bash
 export STRIPE_TEST_API_KEY=sk_test_YOUR_KEY
-export STRIPE_TEST_WEBHOOK_SECRET=whsec_YOUR_SECRET
 mvn verify -pl integration-test
 ```
 
@@ -186,7 +184,7 @@ Each variable can still be overridden per-run with the matching `-Dstripe.test.*
 
 Subscription tests create and tear down a real subscription automatically. Optionally set `STRIPE_TEST_PRICE_ID` (or `-Dstripe.test.priceId=price_...`) to reuse an existing test-mode price instead of creating a new Product + Price each run.
 
-Webhook signature tests (`StripeWebhookSignatureIT`) run without a network connection.
+Webhook tests (`StripeWebhookSignatureIT`, `StripeWebhookEndpointIT`) run without a network connection or Stripe credentials — they generate and verify their own HMAC signatures against a fixed, non-secret test key.
 
 ---
 
