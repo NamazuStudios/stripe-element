@@ -50,6 +50,7 @@ class StripeServiceImplTest {
 
     @Mock private StripeGateway gateway;
     @Mock private StripePriceCache priceCache;
+    @Mock private StripeMeterPriceCache meterPriceCache;
     @Mock private SubscriptionCollection subscriptionCollection;
     @Mock private PriceCollection priceCollection;
     @Mock private com.stripe.model.ProductCollection productCollection;
@@ -63,7 +64,7 @@ class StripeServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new StripeServiceImpl(gateway, priceCache, () -> userService, transactionProvider);
+        service = new StripeServiceImpl(gateway, priceCache, meterPriceCache, () -> userService, transactionProvider);
         final var user = mock(User.class);
         lenient().when(user.getId()).thenReturn("user_test_001");
         lenient().when(userService.getCurrentUser()).thenReturn(user);

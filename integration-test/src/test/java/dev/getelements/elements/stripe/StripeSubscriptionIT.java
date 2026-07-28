@@ -12,6 +12,7 @@ import com.stripe.param.PriceUpdateParams;
 import com.stripe.param.ProductCreateParams;
 import com.stripe.param.ProductUpdateParams;
 import com.stripe.param.SubscriptionCreateParams;
+import dev.getelements.elements.stripe.service.StripeMeterPriceCache;
 import dev.getelements.elements.stripe.service.StripePriceCache;
 import dev.getelements.elements.stripe.service.StripeServiceImpl;
 import org.junit.jupiter.api.AfterAll;
@@ -105,7 +106,7 @@ public class StripeSubscriptionIT {
     @Test
     void getSubscriptionStatus_returnsStatus() {
 
-        final var service = new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), null, null);
+        final var service = new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), mock(StripeMeterPriceCache.class), null, null);
         final var response = service.getSubscriptionStatus(subscriptionId);
 
         assertNotNull(response.subscriptionId());
@@ -116,7 +117,7 @@ public class StripeSubscriptionIT {
     void getSubscriptionStatus_matchesDirectRetrieve() throws StripeException {
 
         final var direct = Subscription.retrieve(subscriptionId);
-        final var service = new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), null, null);
+        final var service = new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), mock(StripeMeterPriceCache.class), null, null);
         final var response = service.getSubscriptionStatus(subscriptionId);
 
         assertEquals(direct.getStatus(), response.status());

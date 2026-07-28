@@ -6,6 +6,7 @@ import dev.getelements.elements.sdk.dao.Transaction;
 import dev.getelements.elements.sdk.model.user.User;
 import dev.getelements.elements.sdk.service.user.UserService;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
+import dev.getelements.elements.stripe.service.StripeMeterPriceCache;
 import dev.getelements.elements.stripe.service.StripePriceCache;
 import dev.getelements.elements.stripe.service.StripeServiceImpl;
 import org.junit.jupiter.api.BeforeAll;
@@ -34,7 +35,7 @@ public class StripePaymentIntentIT {
         when(userService.getCurrentUser()).thenReturn(user);
         final Transaction transaction = mock(Transaction.class);
         doAnswer(inv -> null).when(transaction).performAndCloseV(any());
-        return new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), () -> userService, () -> transaction);
+        return new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), mock(StripeMeterPriceCache.class), () -> userService, () -> transaction);
     }
 
     @Test

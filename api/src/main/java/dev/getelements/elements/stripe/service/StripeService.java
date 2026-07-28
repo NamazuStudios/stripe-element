@@ -154,6 +154,18 @@ public interface StripeService {
     List<MeterSummary> listMeters(boolean activeOnly, int limit);
 
     /**
+     * Resolves the active recurring Price billing usage for the given meter event name — i.e. the
+     * same join {@link #listMeters} performs per-meter, but targeted at a single, known event name
+     * rather than fetching the whole catalogue. Intended for callers that already know which meter
+     * event name they care about (e.g. resolving a display price for one metered unit) and don't
+     * need the rest of the meter catalogue. Returns {@link Optional#empty()} if no meter with that
+     * event name exists, or it has no recurring Price configured yet.
+     *
+     * @param eventName the meter event name (as passed to {@link #recordMeterEvent})
+     */
+    Optional<PriceSummary> resolvePriceForMeterEventName(String eventName);
+
+    /**
      * Searches for a Stripe customer by a metadata key-value pair using the Stripe Customer Search API.
      * Returns the customer's Stripe ID if exactly one match is found, or an empty {@link Optional} if
      * no customer has that metadata. Use {@code metadataKey = }{@link #METADATA_ORG_ID} to prevent

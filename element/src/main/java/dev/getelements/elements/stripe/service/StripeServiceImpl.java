@@ -57,6 +57,7 @@ public class StripeServiceImpl implements StripeService {
 
     private final StripeGateway gateway;
     private final StripePriceCache priceCache;
+    private final StripeMeterPriceCache meterPriceCache;
     private final Provider<UserService> userServiceProvider;
     private final Provider<Transaction> transactionProvider;
 
@@ -64,10 +65,12 @@ public class StripeServiceImpl implements StripeService {
     public StripeServiceImpl(
             StripeGateway gateway,
             StripePriceCache priceCache,
+            StripeMeterPriceCache meterPriceCache,
             Provider<UserService> userServiceProvider,
             Provider<Transaction> transactionProvider) {
         this.gateway = gateway;
         this.priceCache = priceCache;
+        this.meterPriceCache = meterPriceCache;
         this.userServiceProvider = userServiceProvider;
         this.transactionProvider = transactionProvider;
     }
@@ -376,36 +379,62 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public List<MeterSummary> listMeters(boolean activeOnly, int limit) {
-
         try {
-
-            final var builder = MeterListParams.builder().setLimit((long) limit);
-
-            if (activeOnly) {
-                builder.setStatus(MeterListParams.Status.ACTIVE);
-            }
-
-            final var meters = gateway.listMeters(builder.build()).getData();
-
-            // Stripe has no "list prices by meter" endpoint, so fetch active recurring prices once
-            // and join in memory by Price.Recurring#getMeter() — one extra round trip instead of one
-            // per meter. Last-write-wins if more than one Price references the same meter.
-            final var priceListParams = PriceListParams.builder()
-                    .setActive(true)
-                    .setType(PriceListParams.Type.RECURRING)
-                    .setLimit(100L)
-                    .build();
-            final var priceByMeterId = gateway.listPrices(priceListParams).getData().stream()
-                    .filter(p -> p.getRecurring() != null && p.getRecurring().getMeter() != null)
-                    .collect(Collectors.toMap(p -> p.getRecurring().getMeter(), this::mapPrice, (a, b) -> b));
-
-            return meters.stream()
-                    .map(m -> mapMeter(m, priceByMeterId.get(m.getId())))
-                    .toList();
-
+            return joinMetersToPrices(activeOnly, limit);
         } catch (StripeException e) {
             throw stripeError(e);
         }
+    }
+
+    @Override
+    public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName) {
+
+        final var cached = meterPriceCache.get(eventName);
+        if (cached != null) {
+            return cached;
+        }
+
+        try {
+            final var result = joinMetersToPrices(true, 100).stream()
+                    .filter(m -> eventName.equals(m.eventName()))
+                    .findFirst()
+                    .map(MeterSummary::price);
+            meterPriceCache.put(eventName, result);
+            return result;
+        } catch (StripeException e) {
+            throw stripeError(e);
+        }
+    }
+
+    /**
+     * Fetches meters (filtered per [activeOnly]/[limit]) and joins each to its active recurring
+     * Price by {@code Price.Recurring#getMeter()} — Stripe has no "list prices by meter" endpoint,
+     * so this is one extra round trip instead of one per meter. Last-write-wins if more than one
+     * Price references the same meter. Shared by {@link #listMeters} and
+     * {@link #resolvePriceForMeterEventName}.
+     */
+    private List<MeterSummary> joinMetersToPrices(boolean activeOnly, int limit) throws StripeException {
+
+        final var builder = MeterListParams.builder().setLimit((long) limit);
+
+        if (activeOnly) {
+            builder.setStatus(MeterListParams.Status.ACTIVE);
+        }
+
+        final var meters = gateway.listMeters(builder.build()).getData();
+
+        final var priceListParams = PriceListParams.builder()
+                .setActive(true)
+                .setType(PriceListParams.Type.RECURRING)
+                .setLimit(100L)
+                .build();
+        final var priceByMeterId = gateway.listPrices(priceListParams).getData().stream()
+                .filter(p -> p.getRecurring() != null && p.getRecurring().getMeter() != null)
+                .collect(Collectors.toMap(p -> p.getRecurring().getMeter(), this::mapPrice, (a, b) -> b));
+
+        return meters.stream()
+                .map(m -> mapMeter(m, priceByMeterId.get(m.getId())))
+                .toList();
     }
 
     @Override
