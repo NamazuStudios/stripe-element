@@ -22,6 +22,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up JDK 21 and Maven Credentials
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
       - name: Get current version
         id: version
         run: |
@@ -38,16 +48,6 @@ jobs:
             echo "Please bump the version in pom.xml and push before retrying."
             exit 1
           fi
-
-      - name: Set up JDK 21 and Maven Credentials
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: maven
-          server-id: github
-          server-username: GITHUB_ACTOR
-          server-password: GITHUB_TOKEN
 
       - name: Build and Publish Snapshot
         run: mvn -B --no-transfer-progress -Pgithub-publish clean deploy
