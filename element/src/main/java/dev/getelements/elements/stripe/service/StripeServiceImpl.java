@@ -42,6 +42,7 @@ import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -576,7 +577,7 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public void recordMeterEvent(String customerId, String eventName, long value, String idempotencyKey) {
+    public void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey) {
 
         try {
 
@@ -584,7 +585,7 @@ public class StripeServiceImpl implements StripeService {
                     .setEventName(eventName)
                     .setIdentifier(idempotencyKey)
                     .putPayload("stripe_customer_id", customerId)
-                    .putPayload("value", String.valueOf(value))
+                    .putPayload("value", value.toPlainString())
                     .build();
 
             gateway.createMeterEvent(params, idempotencyKey);

@@ -307,7 +307,7 @@ class StripeServiceImplTest {
 
     @Test
     void recordMeterEvent_passesAllFieldsToGateway() throws StripeException {
-        service.recordMeterEvent("cus_test", "api_requests", 25, "idem-key-abc");
+        service.recordMeterEvent("cus_test", "api_requests", java.math.BigDecimal.valueOf(25), "idem-key-abc");
 
         final var captor = ArgumentCaptor.forClass(com.stripe.param.billing.MeterEventCreateParams.class);
         verify(gateway).createMeterEvent(captor.capture(), eq("idem-key-abc"));
@@ -317,6 +317,16 @@ class StripeServiceImplTest {
         assertEquals("idem-key-abc", params.getIdentifier());
         assertEquals("cus_test", params.getPayload().get("stripe_customer_id"));
         assertEquals("25", params.getPayload().get("value"));
+    }
+
+    @Test
+    void recordMeterEvent_supportsDecimalValue() throws StripeException {
+        service.recordMeterEvent("cus_test", "api_requests", new java.math.BigDecimal("0.25"), "idem-key-frac");
+
+        final var captor = ArgumentCaptor.forClass(com.stripe.param.billing.MeterEventCreateParams.class);
+        verify(gateway).createMeterEvent(captor.capture(), eq("idem-key-frac"));
+
+        assertEquals("0.25", captor.getValue().getPayload().get("value"));
     }
 
     // --- resolvePriceForMeterEventName ---

@@ -15,6 +15,7 @@ import dev.getelements.elements.stripe.model.ProductSummary;
 import dev.getelements.elements.stripe.model.SubscriptionListResponse;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -232,11 +233,11 @@ public interface StripeService {
      *
      * @param customerId     Stripe customer ID
      * @param eventName      meter name as configured in the Stripe Dashboard
-     * @param value          usage quantity to report (must be &gt; 0)
+     * @param value          usage quantity to report, e.g. {@code 0.25} (must be &gt; 0)
      * @param idempotencyKey unique key for this event; re-submitting the same key is a no-op
      * @throws NoSuchMeterException if Stripe has no active meter configured for {@code eventName}
      */
-    void recordMeterEvent(String customerId, String eventName, long value, String idempotencyKey);
+    void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey);
 
     /**
      * Updates a Stripe customer's contact details. Fields that are {@code null} are left unchanged.
