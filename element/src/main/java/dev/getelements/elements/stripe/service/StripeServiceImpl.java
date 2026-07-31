@@ -388,6 +388,19 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName) {
+        return resolvePriceForMeterEventName(eventName, null);
+    }
+
+    @Override
+    public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId) {
+
+        if (subscriptionId != null && !subscriptionId.isBlank()) {
+            try {
+                return resolvePriceFromSubscription(eventName, subscriptionId);
+            } catch (StripeException e) {
+                throw stripeError(e);
+            }
+        }
 
         final var cached = meterPriceCache.get(eventName);
         if (cached != null) {
@@ -404,6 +417,43 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw stripeError(e);
         }
+    }
+
+    /**
+     * Resolves the meter for {@code eventName}, then matches it against {@code subscriptionId}'s
+     * own line items rather than the catalogue-wide active-Price join, so a customer on a
+     * non-default tier for a metered SKU gets the Price they're actually subscribed to. Not
+     * cached — subscription item prices can change (upgrades/downgrades) independently of the
+     * TTL that governs {@link #meterPriceCache}.
+     */
+    private Optional<PriceSummary> resolvePriceFromSubscription(String eventName, String subscriptionId) throws StripeException {
+
+        final var meterId = findMeterIdForEventName(eventName);
+
+        if (meterId.isEmpty()) {
+            return Optional.empty();
+        }
+
+        final var subscription = gateway.retrieveSubscription(subscriptionId);
+
+        return subscription.getItems().getData().stream()
+                .map(com.stripe.model.SubscriptionItem::getPrice)
+                .filter(p -> p.getRecurring() != null && meterId.get().equals(p.getRecurring().getMeter()))
+                .findFirst()
+                .map(this::mapPrice);
+    }
+
+    private Optional<String> findMeterIdForEventName(String eventName) throws StripeException {
+
+        final var params = MeterListParams.builder()
+                .setLimit(100L)
+                .setStatus(MeterListParams.Status.ACTIVE)
+                .build();
+
+        return gateway.listMeters(params).getData().stream()
+                .filter(m -> eventName.equals(m.getEventName()))
+                .map(com.stripe.model.billing.Meter::getId)
+                .findFirst();
     }
 
     /**

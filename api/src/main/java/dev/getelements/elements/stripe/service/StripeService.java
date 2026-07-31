@@ -161,9 +161,31 @@ public interface StripeService {
      * need the rest of the meter catalogue. Returns {@link Optional#empty()} if no meter with that
      * event name exists, or it has no recurring Price configured yet.
      *
+     * <p>Equivalent to {@link #resolvePriceForMeterEventName(String, String)} with a {@code null}
+     * subscription ID.
+     *
      * @param eventName the meter event name (as passed to {@link #recordMeterEvent})
      */
     Optional<PriceSummary> resolvePriceForMeterEventName(String eventName);
+
+    /**
+     * Resolves the recurring Price billing usage for the given meter event name, scoped to a
+     * specific subscription. If more than one active Price references the same meter (e.g. a
+     * customer on a legacy tier vs. the current one), the catalogue-wide {@link #listMeters}/
+     * {@link #resolvePriceForMeterEventName(String)} join can only return an arbitrary match.
+     * Passing {@code subscriptionId} disambiguates by looking at the Price actually attached to
+     * that subscription's line items instead.
+     *
+     * <p>If {@code subscriptionId} is {@code null} or blank, this behaves exactly like
+     * {@link #resolvePriceForMeterEventName(String)}. Otherwise it bypasses the shared price
+     * cache — the subscription lookup is per-call — and returns {@link Optional#empty()} if the
+     * meter doesn't exist or the subscription has no item priced against it.
+     *
+     * @param eventName      the meter event name (as passed to {@link #recordMeterEvent})
+     * @param subscriptionId Stripe subscription ID ({@code sub_...}) to scope the lookup to, or
+     *                        {@code null} to fall back to the catalogue-wide lookup
+     */
+    Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId);
 
     /**
      * Searches for a Stripe customer by a metadata key-value pair using the Stripe Customer Search API.

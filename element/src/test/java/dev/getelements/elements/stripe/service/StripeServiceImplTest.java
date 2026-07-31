@@ -39,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -316,6 +317,96 @@ class StripeServiceImplTest {
         assertEquals("idem-key-abc", params.getIdentifier());
         assertEquals("cus_test", params.getPayload().get("stripe_customer_id"));
         assertEquals("25", params.getPayload().get("value"));
+    }
+
+    // --- resolvePriceForMeterEventName ---
+
+    @Test
+    void resolvePriceForMeterEventName_withSubscriptionId_returnsPriceFromSubscriptionItem() throws StripeException {
+        final var meter = mock(com.stripe.model.billing.Meter.class);
+        when(meter.getEventName()).thenReturn("api_requests");
+        when(meter.getId()).thenReturn("mtr_001");
+        final var meterCollection = mock(com.stripe.model.billing.MeterCollection.class);
+        when(meterCollection.getData()).thenReturn(List.of(meter));
+        when(gateway.listMeters(any())).thenReturn(meterCollection);
+
+        final var recurring = mock(com.stripe.model.Price.Recurring.class);
+        when(recurring.getMeter()).thenReturn("mtr_001");
+        final var price = mock(Price.class);
+        when(price.getId()).thenReturn("price_tier_2");
+        when(price.getProduct()).thenReturn("prod_001");
+        when(price.getCurrency()).thenReturn("usd");
+        when(price.getType()).thenReturn("recurring");
+        when(price.getUnitAmount()).thenReturn(500L);
+        when(price.getRecurring()).thenReturn(recurring);
+
+        final var item = mock(com.stripe.model.SubscriptionItem.class);
+        when(item.getPrice()).thenReturn(price);
+        final var itemCollection = mock(com.stripe.model.SubscriptionItemCollection.class);
+        when(itemCollection.getData()).thenReturn(List.of(item));
+        final var sub = mock(Subscription.class);
+        when(sub.getItems()).thenReturn(itemCollection);
+        when(gateway.retrieveSubscription("sub_001")).thenReturn(sub);
+
+        final var result = service.resolvePriceForMeterEventName("api_requests", "sub_001");
+
+        assertTrue(result.isPresent());
+        assertEquals("price_tier_2", result.get().id());
+        verifyNoInteractions(meterPriceCache);
+    }
+
+    @Test
+    void resolvePriceForMeterEventName_withSubscriptionId_noMatchingItem_returnsEmpty() throws StripeException {
+        final var meter = mock(com.stripe.model.billing.Meter.class);
+        when(meter.getEventName()).thenReturn("api_requests");
+        when(meter.getId()).thenReturn("mtr_001");
+        final var meterCollection = mock(com.stripe.model.billing.MeterCollection.class);
+        when(meterCollection.getData()).thenReturn(List.of(meter));
+        when(gateway.listMeters(any())).thenReturn(meterCollection);
+
+        final var otherRecurring = mock(com.stripe.model.Price.Recurring.class);
+        when(otherRecurring.getMeter()).thenReturn("mtr_other");
+        final var otherPrice = mock(Price.class);
+        when(otherPrice.getRecurring()).thenReturn(otherRecurring);
+        final var item = mock(com.stripe.model.SubscriptionItem.class);
+        when(item.getPrice()).thenReturn(otherPrice);
+        final var itemCollection = mock(com.stripe.model.SubscriptionItemCollection.class);
+        when(itemCollection.getData()).thenReturn(List.of(item));
+        final var sub = mock(Subscription.class);
+        when(sub.getItems()).thenReturn(itemCollection);
+        when(gateway.retrieveSubscription("sub_001")).thenReturn(sub);
+
+        assertTrue(service.resolvePriceForMeterEventName("api_requests", "sub_001").isEmpty());
+    }
+
+    @Test
+    void resolvePriceForMeterEventName_withSubscriptionId_unknownEventName_returnsEmptyWithoutFetchingSubscription() throws StripeException {
+        final var meterCollection = mock(com.stripe.model.billing.MeterCollection.class);
+        when(meterCollection.getData()).thenReturn(List.of());
+        when(gateway.listMeters(any())).thenReturn(meterCollection);
+
+        assertTrue(service.resolvePriceForMeterEventName("unknown_event", "sub_001").isEmpty());
+        verify(gateway, never()).retrieveSubscription(any());
+    }
+
+    @Test
+    void resolvePriceForMeterEventName_blankSubscriptionId_fallsBackToCatalogueWideLookup() throws StripeException {
+        final var cached = Optional.of(new PriceSummary("price_cached", "prod_001", null, 100L, "usd", "recurring", "month"));
+        when(meterPriceCache.get("api_requests")).thenReturn(cached);
+
+        final var result = service.resolvePriceForMeterEventName("api_requests", "  ");
+
+        assertSame(cached, result);
+        verifyNoInteractions(gateway);
+    }
+
+    @Test
+    void resolvePriceForMeterEventName_noSubscriptionId_cacheHit_doesNotCallGateway() throws StripeException {
+        final var cached = Optional.of(new PriceSummary("price_cached", "prod_001", null, 100L, "usd", "recurring", "month"));
+        when(meterPriceCache.get("api_requests")).thenReturn(cached);
+
+        assertSame(cached, service.resolvePriceForMeterEventName("api_requests"));
+        verifyNoInteractions(gateway);
     }
 
     // --- createSubscription ---
