@@ -13,6 +13,7 @@ import dev.getelements.elements.stripe.service.StripeEventLogServiceImpl;
 import dev.getelements.elements.stripe.service.StripeGateway;
 import dev.getelements.elements.stripe.service.StripeService;
 import dev.getelements.elements.stripe.service.StripeServiceImpl;
+import dev.getelements.elements.stripe.service.StripeMeterPriceCache;
 import dev.getelements.elements.stripe.service.StripePriceCache;
 
 public class StripeModule extends AbstractModule {
@@ -28,6 +29,7 @@ public class StripeModule extends AbstractModule {
         bind(DefaultStripeGateway.class);
         bind(StripeServiceImpl.class);
         bind(StripePriceCache.class).in(com.google.inject.Scopes.SINGLETON);
+        bind(StripeMeterPriceCache.class).in(com.google.inject.Scopes.SINGLETON);
 
         bind(StripeConfigDao.class).to(MongoStripeConfigDao.class);
         bind(StripeEventLogDao.class).to(MongoStripeEventLogDao.class);

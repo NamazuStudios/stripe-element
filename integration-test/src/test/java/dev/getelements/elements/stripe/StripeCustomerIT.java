@@ -9,6 +9,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import dev.getelements.elements.stripe.service.StripeMeterPriceCache;
 import dev.getelements.elements.stripe.service.StripePriceCache;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -38,7 +39,7 @@ public class StripeCustomerIT {
     }
 
     private static StripeServiceImpl service() {
-        return new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), null, null);
+        return new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), mock(StripeMeterPriceCache.class), null, null);
     }
 
     // ---- createCustomer -----------------------------------------------------

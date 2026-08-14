@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -182,7 +183,7 @@ class StripePaymentEndpointTest {
         final var response = endpoint.recordMeterEvent(request);
 
         assertEquals(Response.Status.NO_CONTENT.getStatusCode(), response.getStatus());
-        verify(stripeService).recordMeterEvent("cus_test", "api_requests", 10, "idem-key-1");
+        verify(stripeService).recordMeterEvent("cus_test", "api_requests", BigDecimal.valueOf(10), "idem-key-1");
     }
 
 }

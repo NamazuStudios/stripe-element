@@ -9,9 +9,14 @@ package dev.getelements.elements.stripe.model;
  *                     {@code createMeterEvent}) — this is the value catalogue configuration should
  *                     store to associate a billable unit with this meter
  * @param status      {@code "active"} or {@code "inactive"}
+ * @param price       the recurring Price billing this meter's usage (i.e. the one whose
+ *                     {@code recurring.meter} points back at this meter's id), or {@code null} if
+ *                     no such Price exists yet. When more than one Price references the same meter,
+ *                     an arbitrary one is returned — configure exactly one per meter in Stripe.
  */
 public record MeterSummary(
         String id,
         String displayName,
         String eventName,
-        String status) {}
+        String status,
+        PriceSummary price) {}

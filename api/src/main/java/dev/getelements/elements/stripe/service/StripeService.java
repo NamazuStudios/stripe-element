@@ -15,6 +15,7 @@ import dev.getelements.elements.stripe.model.ProductSummary;
 import dev.getelements.elements.stripe.model.SubscriptionListResponse;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -154,6 +155,40 @@ public interface StripeService {
     List<MeterSummary> listMeters(boolean activeOnly, int limit);
 
     /**
+     * Resolves the active recurring Price billing usage for the given meter event name — i.e. the
+     * same join {@link #listMeters} performs per-meter, but targeted at a single, known event name
+     * rather than fetching the whole catalogue. Intended for callers that already know which meter
+     * event name they care about (e.g. resolving a display price for one metered unit) and don't
+     * need the rest of the meter catalogue. Returns {@link Optional#empty()} if no meter with that
+     * event name exists, or it has no recurring Price configured yet.
+     *
+     * <p>Equivalent to {@link #resolvePriceForMeterEventName(String, String)} with a {@code null}
+     * subscription ID.
+     *
+     * @param eventName the meter event name (as passed to {@link #recordMeterEvent})
+     */
+    Optional<PriceSummary> resolvePriceForMeterEventName(String eventName);
+
+    /**
+     * Resolves the recurring Price billing usage for the given meter event name, scoped to a
+     * specific subscription. If more than one active Price references the same meter (e.g. a
+     * customer on a legacy tier vs. the current one), the catalogue-wide {@link #listMeters}/
+     * {@link #resolvePriceForMeterEventName(String)} join can only return an arbitrary match.
+     * Passing {@code subscriptionId} disambiguates by looking at the Price actually attached to
+     * that subscription's line items instead.
+     *
+     * <p>If {@code subscriptionId} is {@code null} or blank, this behaves exactly like
+     * {@link #resolvePriceForMeterEventName(String)}. Otherwise it bypasses the shared price
+     * cache — the subscription lookup is per-call — and returns {@link Optional#empty()} if the
+     * meter doesn't exist or the subscription has no item priced against it.
+     *
+     * @param eventName      the meter event name (as passed to {@link #recordMeterEvent})
+     * @param subscriptionId Stripe subscription ID ({@code sub_...}) to scope the lookup to, or
+     *                        {@code null} to fall back to the catalogue-wide lookup
+     */
+    Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId);
+
+    /**
      * Searches for a Stripe customer by a metadata key-value pair using the Stripe Customer Search API.
      * Returns the customer's Stripe ID if exactly one match is found, or an empty {@link Optional} if
      * no customer has that metadata. Use {@code metadataKey = }{@link #METADATA_ORG_ID} to prevent
@@ -198,11 +233,11 @@ public interface StripeService {
      *
      * @param customerId     Stripe customer ID
      * @param eventName      meter name as configured in the Stripe Dashboard
-     * @param value          usage quantity to report (must be &gt; 0)
+     * @param value          usage quantity to report, e.g. {@code 0.25} (must be &gt; 0)
      * @param idempotencyKey unique key for this event; re-submitting the same key is a no-op
      * @throws NoSuchMeterException if Stripe has no active meter configured for {@code eventName}
      */
-    void recordMeterEvent(String customerId, String eventName, long value, String idempotencyKey);
+    void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey);
 
     /**
      * Updates a Stripe customer's contact details. Fields that are {@code null} are left unchanged.
