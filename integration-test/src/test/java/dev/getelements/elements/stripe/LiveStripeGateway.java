@@ -35,11 +35,13 @@ import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.billing.MeterEventCreateParams;
 import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.billingportal.SessionCreateParams;
+import dev.getelements.elements.stripe.model.StripeMode;
 import dev.getelements.elements.stripe.service.StripeGateway;
 
 /**
  * StripeGateway implementation for integration tests. Delegates directly to the
  * static Stripe SDK methods, relying on Stripe.apiKey already being set by the test.
+ * Mode is ignored — the test's global Stripe.apiKey already picks the account.
  */
 class LiveStripeGateway implements StripeGateway {
 
@@ -49,8 +51,18 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
+    public Customer createCustomer(CustomerCreateParams params, StripeMode mode) throws StripeException {
+        return createCustomer(params);
+    }
+
+    @Override
     public Customer updateCustomer(String customerId, CustomerUpdateParams params) throws StripeException {
         return Customer.retrieve(customerId).update(params);
+    }
+
+    @Override
+    public Customer updateCustomer(String customerId, CustomerUpdateParams params, StripeMode mode) throws StripeException {
+        return updateCustomer(customerId, params);
     }
 
     @Override
@@ -59,8 +71,18 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
+    public SetupIntent createSetupIntent(SetupIntentCreateParams params, StripeMode mode) throws StripeException {
+        return createSetupIntent(params);
+    }
+
+    @Override
     public PaymentMethodCollection listPaymentMethods(String customerId, CustomerListPaymentMethodsParams params) throws StripeException {
         return Customer.retrieve(customerId).listPaymentMethods(params);
+    }
+
+    @Override
+    public PaymentMethodCollection listPaymentMethods(String customerId, CustomerListPaymentMethodsParams params, StripeMode mode) throws StripeException {
+        return listPaymentMethods(customerId, params);
     }
 
     @Override
@@ -72,13 +94,28 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
+    public PaymentIntent createPaymentIntent(PaymentIntentCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
+        return createPaymentIntent(params, idempotencyKey);
+    }
+
+    @Override
     public Subscription retrieveSubscription(String subscriptionId) throws StripeException {
         return Subscription.retrieve(subscriptionId);
     }
 
     @Override
+    public Subscription retrieveSubscription(String subscriptionId, StripeMode mode) throws StripeException {
+        return retrieveSubscription(subscriptionId);
+    }
+
+    @Override
     public SubscriptionCollection listSubscriptions(SubscriptionListParams params) throws StripeException {
         return Subscription.list(params);
+    }
+
+    @Override
+    public SubscriptionCollection listSubscriptions(SubscriptionListParams params, StripeMode mode) throws StripeException {
+        return listSubscriptions(params);
     }
 
     @Override
@@ -90,13 +127,28 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
+    public Subscription createSubscription(SubscriptionCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
+        return createSubscription(params, idempotencyKey);
+    }
+
+    @Override
     public Subscription cancelSubscription(String subscriptionId) throws StripeException {
         return Subscription.retrieve(subscriptionId).cancel((SubscriptionCancelParams) null);
     }
 
     @Override
+    public Subscription cancelSubscription(String subscriptionId, StripeMode mode) throws StripeException {
+        return cancelSubscription(subscriptionId);
+    }
+
+    @Override
     public Session createBillingPortalSession(SessionCreateParams params) throws StripeException {
         return Session.create(params);
+    }
+
+    @Override
+    public Session createBillingPortalSession(SessionCreateParams params, StripeMode mode) throws StripeException {
+        return createBillingPortalSession(params);
     }
 
     @Override
@@ -106,13 +158,28 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
+    public MeterEvent createMeterEvent(MeterEventCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
+        return createMeterEvent(params, idempotencyKey);
+    }
+
+    @Override
     public ProductCollection listProducts(ProductListParams params) throws StripeException {
         return Product.list(params);
     }
 
     @Override
+    public ProductCollection listProducts(ProductListParams params, StripeMode mode) throws StripeException {
+        return listProducts(params);
+    }
+
+    @Override
     public PriceCollection listPrices(PriceListParams params) throws StripeException {
         return Price.list(params);
+    }
+
+    @Override
+    public PriceCollection listPrices(PriceListParams params, StripeMode mode) throws StripeException {
+        return listPrices(params);
     }
 
     @Override
@@ -124,8 +191,18 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
+    public Product retrieveProduct(String productId, StripeMode mode) throws StripeException {
+        return retrieveProduct(productId);
+    }
+
+    @Override
     public Price retrievePrice(String priceId) throws StripeException {
         return Price.retrieve(priceId);
+    }
+
+    @Override
+    public Price retrievePrice(String priceId, StripeMode mode) throws StripeException {
+        return retrievePrice(priceId);
     }
 
     @Override
@@ -134,13 +211,28 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
+    public MeterCollection listMeters(MeterListParams params, StripeMode mode) throws StripeException {
+        return listMeters(params);
+    }
+
+    @Override
     public CustomerSearchResult searchCustomers(CustomerSearchParams params) throws StripeException {
         return Customer.search(params);
     }
 
     @Override
+    public CustomerSearchResult searchCustomers(CustomerSearchParams params, StripeMode mode) throws StripeException {
+        return searchCustomers(params);
+    }
+
+    @Override
     public InvoiceCollection listInvoices(InvoiceListParams params) throws StripeException {
         return Invoice.list(params);
+    }
+
+    @Override
+    public InvoiceCollection listInvoices(InvoiceListParams params, StripeMode mode) throws StripeException {
+        return listInvoices(params);
     }
 
     @Override
@@ -152,6 +244,14 @@ class LiveStripeGateway implements StripeGateway {
                     params, RequestOptions.builder().setIdempotencyKey(idempotencyKey).build());
         }
         return com.stripe.model.checkout.Session.create(params);
+    }
+
+    @Override
+    public com.stripe.model.checkout.Session createCheckoutSession(
+            com.stripe.param.checkout.SessionCreateParams params,
+            String idempotencyKey,
+            StripeMode mode) throws StripeException {
+        return createCheckoutSession(params, idempotencyKey);
     }
 
 }

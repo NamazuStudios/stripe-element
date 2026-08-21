@@ -35,6 +35,7 @@ import dev.getelements.elements.stripe.model.MeterSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
+import dev.getelements.elements.stripe.model.StripeMode;
 import dev.getelements.elements.stripe.model.SubscriptionListResponse;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 import jakarta.inject.Provider;
@@ -57,6 +58,7 @@ public class StripeServiceImpl implements StripeService {
     private static final String NO_ACTIVE_METER_MESSAGE = "No active meter found for event name";
 
     private final StripeGateway gateway;
+    private final StripeConfigService configService;
     private final StripePriceCache priceCache;
     private final StripeMeterPriceCache meterPriceCache;
     private final Provider<UserService> userServiceProvider;
@@ -65,11 +67,13 @@ public class StripeServiceImpl implements StripeService {
     @Inject
     public StripeServiceImpl(
             StripeGateway gateway,
+            StripeConfigService configService,
             StripePriceCache priceCache,
             StripeMeterPriceCache meterPriceCache,
             Provider<UserService> userServiceProvider,
             Provider<Transaction> transactionProvider) {
         this.gateway = gateway;
+        this.configService = configService;
         this.priceCache = priceCache;
         this.meterPriceCache = meterPriceCache;
         this.userServiceProvider = userServiceProvider;
@@ -78,6 +82,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public CreateCustomerResponse createCustomer(String email, String name, String orgId) {
+        return createCustomer(email, name, orgId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public CreateCustomerResponse createCustomer(String email, String name, String orgId, StripeMode mode) {
 
         try {
 
@@ -87,7 +96,7 @@ public class StripeServiceImpl implements StripeService {
                     .putMetadata(StripeService.METADATA_ORG_ID, orgId)
                     .build();
 
-            return new CreateCustomerResponse(gateway.createCustomer(params).getId());
+            return new CreateCustomerResponse(gateway.createCustomer(params, mode).getId());
 
         } catch (StripeException e) {
             throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
@@ -96,13 +105,18 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public void updateCustomer(String customerId, String email, String name) {
+        updateCustomer(customerId, email, name, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public void updateCustomer(String customerId, String email, String name, StripeMode mode) {
 
         try {
 
             final var builder = CustomerUpdateParams.builder();
             if (email != null) builder.setEmail(email);
             if (name != null) builder.setName(name);
-            gateway.updateCustomer(customerId, builder.build());
+            gateway.updateCustomer(customerId, builder.build(), mode);
 
         } catch (StripeException e) {
             throw stripeError(e);
@@ -111,6 +125,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public CreateSetupIntentResponse createSetupIntent(String customerId) {
+        return createSetupIntent(customerId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public CreateSetupIntentResponse createSetupIntent(String customerId, StripeMode mode) {
 
         try {
 
@@ -119,7 +138,7 @@ public class StripeServiceImpl implements StripeService {
                     .addPaymentMethodType("card")
                     .build();
 
-            final var intent = gateway.createSetupIntent(params);
+            final var intent = gateway.createSetupIntent(params, mode);
             return new CreateSetupIntentResponse(intent.getId(), intent.getClientSecret());
 
         } catch (StripeException e) {
@@ -129,12 +148,17 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public List<PaymentMethodSummary> listPaymentMethods(String customerId) {
+        return listPaymentMethods(customerId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public List<PaymentMethodSummary> listPaymentMethods(String customerId, StripeMode mode) {
 
         try {
 
             final var params = CustomerListPaymentMethodsParams.builder().build();
 
-            return gateway.listPaymentMethods(customerId, params).getData().stream()
+            return gateway.listPaymentMethods(customerId, params, mode).getData().stream()
                     .map(pm -> {
                         final var card = pm.getCard();
                         return new PaymentMethodSummary(
@@ -152,11 +176,16 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public boolean hasPaymentMethod(String customerId) {
+        return hasPaymentMethod(customerId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public boolean hasPaymentMethod(String customerId, StripeMode mode) {
 
         try {
 
             final var params = CustomerListPaymentMethodsParams.builder().setLimit(1L).build();
-            return !gateway.listPaymentMethods(customerId, params).getData().isEmpty();
+            return !gateway.listPaymentMethods(customerId, params, mode).getData().isEmpty();
 
         } catch (StripeException e) {
             throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
@@ -165,6 +194,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public CreatePaymentIntentResponse createPaymentIntent(final CreatePaymentIntentRequest request) {
+        return createPaymentIntent(request, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public CreatePaymentIntentResponse createPaymentIntent(final CreatePaymentIntentRequest request, StripeMode mode) {
 
         try {
 
@@ -195,7 +229,7 @@ public class StripeServiceImpl implements StripeService {
                                 request.setupFutureUsage().toUpperCase().replace('-', '_')));
             }
 
-            final var intent = gateway.createPaymentIntent(builder.build(), request.idempotencyKey());
+            final var intent = gateway.createPaymentIntent(builder.build(), request.idempotencyKey(), mode);
             return new CreatePaymentIntentResponse(intent.getId(), intent.getClientSecret());
 
         } catch (StripeException e) {
@@ -205,10 +239,15 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public SubscriptionStatusResponse getSubscriptionStatus(String subscriptionId) {
+        return getSubscriptionStatus(subscriptionId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public SubscriptionStatusResponse getSubscriptionStatus(String subscriptionId, StripeMode mode) {
 
         try {
 
-            final var sub = gateway.retrieveSubscription(subscriptionId);
+            final var sub = gateway.retrieveSubscription(subscriptionId, mode);
             return toStatusResponse(sub);
 
         } catch (StripeException e) {
@@ -218,6 +257,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public SubscriptionListResponse listSubscriptionsByCustomer(String customerId, String status, int limit, String startingAfter) {
+        return listSubscriptionsByCustomer(customerId, status, limit, startingAfter, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public SubscriptionListResponse listSubscriptionsByCustomer(String customerId, String status, int limit, String startingAfter, StripeMode mode) {
 
         try {
 
@@ -233,7 +277,7 @@ public class StripeServiceImpl implements StripeService {
                 builder.setStartingAfter(startingAfter);
             }
 
-            final var collection = gateway.listSubscriptions(builder.build());
+            final var collection = gateway.listSubscriptions(builder.build(), mode);
 
             final var subscriptions = collection.getData().stream()
                     .map(this::toStatusResponse)
@@ -249,6 +293,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public String createBillingPortalSession(String customerId, String returnUrl) {
+        return createBillingPortalSession(customerId, returnUrl, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public String createBillingPortalSession(String customerId, String returnUrl, StripeMode mode) {
 
         try {
 
@@ -258,7 +307,7 @@ public class StripeServiceImpl implements StripeService {
                 builder.setReturnUrl(returnUrl);
             }
 
-            return gateway.createBillingPortalSession(builder.build()).getUrl();
+            return gateway.createBillingPortalSession(builder.build(), mode).getUrl();
 
         } catch (StripeException e) {
             throw stripeError(e);
@@ -267,6 +316,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public SubscriptionStatusResponse createSubscription(String customerId, CreateSubscriptionRequest request) {
+        return createSubscription(customerId, request, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public SubscriptionStatusResponse createSubscription(String customerId, CreateSubscriptionRequest request, StripeMode mode) {
 
         try {
 
@@ -283,7 +337,7 @@ public class StripeServiceImpl implements StripeService {
                 request.metadata().forEach(paramsBuilder::putMetadata);
             }
 
-            final var sub = gateway.createSubscription(paramsBuilder.build(), request.idempotencyKey());
+            final var sub = gateway.createSubscription(paramsBuilder.build(), request.idempotencyKey(), mode);
             return toStatusResponse(sub);
 
         } catch (StripeException e) {
@@ -293,9 +347,13 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public SubscriptionStatusResponse cancelSubscription(String subscriptionId) {
+        return cancelSubscription(subscriptionId, configService.resolveDefaultMode());
+    }
 
+    @Override
+    public SubscriptionStatusResponse cancelSubscription(String subscriptionId, StripeMode mode) {
         try {
-            return toStatusResponse(gateway.cancelSubscription(subscriptionId));
+            return toStatusResponse(gateway.cancelSubscription(subscriptionId, mode));
         } catch (StripeException e) {
             throw stripeError(e);
         }
@@ -303,6 +361,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public List<ProductSummary> listProducts(boolean activeOnly, int limit) {
+        return listProducts(activeOnly, limit, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public List<ProductSummary> listProducts(boolean activeOnly, int limit, StripeMode mode) {
 
         try {
 
@@ -312,7 +375,7 @@ public class StripeServiceImpl implements StripeService {
                     .addExpand("data.default_price")
                     .build();
 
-            return gateway.listProducts(params).getData().stream()
+            return gateway.listProducts(params, mode).getData().stream()
                     .map(this::mapProduct)
                     .toList();
 
@@ -323,9 +386,14 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public Optional<ProductSummary> getProduct(String productId) {
+        return getProduct(productId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Optional<ProductSummary> getProduct(String productId, StripeMode mode) {
 
         try {
-            return Optional.of(mapProduct(gateway.retrieveProduct(productId)));
+            return Optional.of(mapProduct(gateway.retrieveProduct(productId, mode)));
         } catch (InvalidRequestException e) {
             if ("resource_missing".equals(e.getCode())) {
                 return Optional.empty();
@@ -338,8 +406,13 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public List<PriceSummary> listPrices(String productId, boolean activeOnly, int limit) {
+        return listPrices(productId, activeOnly, limit, configService.resolveDefaultMode());
+    }
 
-        final var cacheKey = productId + "|" + activeOnly + "|" + limit;
+    @Override
+    public List<PriceSummary> listPrices(String productId, boolean activeOnly, int limit, StripeMode mode) {
+
+        final var cacheKey = mode.name() + "|" + productId + "|" + activeOnly + "|" + limit;
         final var cached = priceCache.get(cacheKey);
 
         if (cached != null) {
@@ -356,7 +429,7 @@ public class StripeServiceImpl implements StripeService {
                 builder.setProduct(productId);
             }
 
-            final var prices = gateway.listPrices(builder.build()).getData().stream()
+            final var prices = gateway.listPrices(builder.build(), mode).getData().stream()
                     .map(this::mapPrice)
                     .toList();
 
@@ -370,9 +443,14 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public PriceSummary retrievePrice(String priceId) {
+        return retrievePrice(priceId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public PriceSummary retrievePrice(String priceId, StripeMode mode) {
 
         try {
-            return mapPrice(gateway.retrievePrice(priceId));
+            return mapPrice(gateway.retrievePrice(priceId, mode));
         } catch (StripeException e) {
             throw stripeError(e);
         }
@@ -380,8 +458,13 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public List<MeterSummary> listMeters(boolean activeOnly, int limit) {
+        return listMeters(activeOnly, limit, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public List<MeterSummary> listMeters(boolean activeOnly, int limit, StripeMode mode) {
         try {
-            return joinMetersToPrices(activeOnly, limit);
+            return joinMetersToPrices(activeOnly, limit, mode);
         } catch (StripeException e) {
             throw stripeError(e);
         }
@@ -389,31 +472,42 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName) {
-        return resolvePriceForMeterEventName(eventName, null);
+        return resolvePriceForMeterEventName(eventName, (String) null);
+    }
+
+    @Override
+    public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, StripeMode mode) {
+        return resolvePriceForMeterEventName(eventName, null, mode);
     }
 
     @Override
     public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId) {
+        return resolvePriceForMeterEventName(eventName, subscriptionId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId, StripeMode mode) {
 
         if (subscriptionId != null && !subscriptionId.isBlank()) {
             try {
-                return resolvePriceFromSubscription(eventName, subscriptionId);
+                return resolvePriceFromSubscription(eventName, subscriptionId, mode);
             } catch (StripeException e) {
                 throw stripeError(e);
             }
         }
 
-        final var cached = meterPriceCache.get(eventName);
+        final var cacheKey = mode.name() + "|" + eventName;
+        final var cached = meterPriceCache.get(cacheKey);
         if (cached != null) {
             return cached;
         }
 
         try {
-            final var result = joinMetersToPrices(true, 100).stream()
+            final var result = joinMetersToPrices(true, 100, mode).stream()
                     .filter(m -> eventName.equals(m.eventName()))
                     .findFirst()
                     .map(MeterSummary::price);
-            meterPriceCache.put(eventName, result);
+            meterPriceCache.put(cacheKey, result);
             return result;
         } catch (StripeException e) {
             throw stripeError(e);
@@ -427,15 +521,15 @@ public class StripeServiceImpl implements StripeService {
      * cached — subscription item prices can change (upgrades/downgrades) independently of the
      * TTL that governs {@link #meterPriceCache}.
      */
-    private Optional<PriceSummary> resolvePriceFromSubscription(String eventName, String subscriptionId) throws StripeException {
+    private Optional<PriceSummary> resolvePriceFromSubscription(String eventName, String subscriptionId, StripeMode mode) throws StripeException {
 
-        final var meterId = findMeterIdForEventName(eventName);
+        final var meterId = findMeterIdForEventName(eventName, mode);
 
         if (meterId.isEmpty()) {
             return Optional.empty();
         }
 
-        final var subscription = gateway.retrieveSubscription(subscriptionId);
+        final var subscription = gateway.retrieveSubscription(subscriptionId, mode);
 
         return subscription.getItems().getData().stream()
                 .map(com.stripe.model.SubscriptionItem::getPrice)
@@ -444,14 +538,14 @@ public class StripeServiceImpl implements StripeService {
                 .map(this::mapPrice);
     }
 
-    private Optional<String> findMeterIdForEventName(String eventName) throws StripeException {
+    private Optional<String> findMeterIdForEventName(String eventName, StripeMode mode) throws StripeException {
 
         final var params = MeterListParams.builder()
                 .setLimit(100L)
                 .setStatus(MeterListParams.Status.ACTIVE)
                 .build();
 
-        return gateway.listMeters(params).getData().stream()
+        return gateway.listMeters(params, mode).getData().stream()
                 .filter(m -> eventName.equals(m.getEventName()))
                 .map(com.stripe.model.billing.Meter::getId)
                 .findFirst();
@@ -464,7 +558,7 @@ public class StripeServiceImpl implements StripeService {
      * Price references the same meter. Shared by {@link #listMeters} and
      * {@link #resolvePriceForMeterEventName}.
      */
-    private List<MeterSummary> joinMetersToPrices(boolean activeOnly, int limit) throws StripeException {
+    private List<MeterSummary> joinMetersToPrices(boolean activeOnly, int limit, StripeMode mode) throws StripeException {
 
         final var builder = MeterListParams.builder().setLimit((long) limit);
 
@@ -472,14 +566,14 @@ public class StripeServiceImpl implements StripeService {
             builder.setStatus(MeterListParams.Status.ACTIVE);
         }
 
-        final var meters = gateway.listMeters(builder.build()).getData();
+        final var meters = gateway.listMeters(builder.build(), mode).getData();
 
         final var priceListParams = PriceListParams.builder()
                 .setActive(true)
                 .setType(PriceListParams.Type.RECURRING)
                 .setLimit(100L)
                 .build();
-        final var priceByMeterId = gateway.listPrices(priceListParams).getData().stream()
+        final var priceByMeterId = gateway.listPrices(priceListParams, mode).getData().stream()
                 .filter(p -> p.getRecurring() != null && p.getRecurring().getMeter() != null)
                 .collect(Collectors.toMap(p -> p.getRecurring().getMeter(), this::mapPrice, (a, b) -> b));
 
@@ -490,6 +584,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue) {
+        return findCustomerByMetadata(metadataKey, metadataValue, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue, StripeMode mode) {
 
         try {
 
@@ -499,7 +598,7 @@ public class StripeServiceImpl implements StripeService {
                     .setLimit(1L)
                     .build();
 
-            return gateway.searchCustomers(params).getData().stream()
+            return gateway.searchCustomers(params, mode).getData().stream()
                     .findFirst()
                     .map(Customer::getId);
 
@@ -510,16 +609,21 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public CreateCheckoutSessionResponse createCheckoutSession(CreateCheckoutSessionRequest request) {
+        return createCheckoutSession(request, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public CreateCheckoutSessionResponse createCheckoutSession(CreateCheckoutSessionRequest request, StripeMode mode) {
 
         try {
 
-            final var mode = "payment".equalsIgnoreCase(request.mode())
+            final var checkoutMode = "payment".equalsIgnoreCase(request.mode())
                     ? com.stripe.param.checkout.SessionCreateParams.Mode.PAYMENT
                     : com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION;
 
             final var paramsBuilder = com.stripe.param.checkout.SessionCreateParams.builder()
                     .setCustomer(request.customerId())
-                    .setMode(mode)
+                    .setMode(checkoutMode)
                     .setSuccessUrl(request.successUrl())
                     .setCancelUrl(request.cancelUrl())
                     .addLineItem(com.stripe.param.checkout.SessionCreateParams.LineItem.builder()
@@ -529,7 +633,7 @@ public class StripeServiceImpl implements StripeService {
 
             if (request.metadata() != null && !request.metadata().isEmpty()) {
                 request.metadata().forEach(paramsBuilder::putMetadata);
-                if (mode == com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION) {
+                if (checkoutMode == com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION) {
                     final var subData = com.stripe.param.checkout.SessionCreateParams.SubscriptionData.builder();
                     request.metadata().forEach(subData::putMetadata);
                     paramsBuilder.setSubscriptionData(subData.build());
@@ -540,7 +644,7 @@ public class StripeServiceImpl implements StripeService {
                 }
             }
 
-            final var session = gateway.createCheckoutSession(paramsBuilder.build(), request.idempotencyKey());
+            final var session = gateway.createCheckoutSession(paramsBuilder.build(), request.idempotencyKey(), mode);
             return new CreateCheckoutSessionResponse(session.getId(), session.getUrl());
 
         } catch (StripeException e) {
@@ -550,6 +654,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public List<InvoiceSummary> listInvoices(String customerId, int limit, String startingAfter) {
+        return listInvoices(customerId, limit, startingAfter, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public List<InvoiceSummary> listInvoices(String customerId, int limit, String startingAfter, StripeMode mode) {
 
         try {
 
@@ -561,7 +670,7 @@ public class StripeServiceImpl implements StripeService {
                 builder.setStartingAfter(startingAfter);
             }
 
-            return gateway.listInvoices(builder.build()).getData().stream()
+            return gateway.listInvoices(builder.build(), mode).getData().stream()
                     .map(inv -> new InvoiceSummary(
                             inv.getId(),
                             inv.getSubscription(),
@@ -578,6 +687,11 @@ public class StripeServiceImpl implements StripeService {
 
     @Override
     public void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey) {
+        recordMeterEvent(customerId, eventName, value, idempotencyKey, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey, StripeMode mode) {
 
         try {
 
@@ -588,7 +702,7 @@ public class StripeServiceImpl implements StripeService {
                     .putPayload("value", value.toPlainString())
                     .build();
 
-            gateway.createMeterEvent(params, idempotencyKey);
+            gateway.createMeterEvent(params, idempotencyKey, mode);
 
         } catch (StripeException e) {
             if (e.getMessage() != null && e.getMessage().contains(NO_ACTIVE_METER_MESSAGE)) {

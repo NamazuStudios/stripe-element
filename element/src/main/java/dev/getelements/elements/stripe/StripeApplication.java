@@ -29,6 +29,12 @@ public class StripeApplication extends Application {
     @ElementRequiredAttribute(sensitive = true)
     public static final String STRIPE_WEBHOOK_SECRET = "dev.getelements.elements.stripe.webhook.secret";
 
+    @ElementDefaultAttribute("")
+    public static final String STRIPE_SANDBOX_API_KEY = "dev.getelements.elements.stripe.sandbox.api.key";
+
+    @ElementDefaultAttribute("")
+    public static final String STRIPE_SANDBOX_WEBHOOK_SECRET = "dev.getelements.elements.stripe.sandbox.webhook.secret";
+
     @ElementDefaultAttribute("300000")
     public static final String PRICE_CACHE_TTL_MS = "dev.getelements.elements.stripe.price.cache.ttl.ms";
 

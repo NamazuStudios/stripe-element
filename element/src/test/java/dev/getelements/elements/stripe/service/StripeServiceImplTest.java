@@ -20,6 +20,7 @@ import dev.getelements.elements.stripe.model.CreateCheckoutSessionRequest;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
+import dev.getelements.elements.stripe.model.StripeMode;
 import dev.getelements.elements.sdk.dao.ReceiptDao;
 import dev.getelements.elements.sdk.dao.Transaction;
 import dev.getelements.elements.sdk.model.receipt.Receipt;
@@ -50,6 +51,7 @@ import static org.mockito.Mockito.*;
 class StripeServiceImplTest {
 
     @Mock private StripeGateway gateway;
+    @Mock private StripeConfigService configService;
     @Mock private StripePriceCache priceCache;
     @Mock private StripeMeterPriceCache meterPriceCache;
     @Mock private SubscriptionCollection subscriptionCollection;
@@ -65,7 +67,8 @@ class StripeServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new StripeServiceImpl(gateway, priceCache, meterPriceCache, () -> userService, transactionProvider);
+        service = new StripeServiceImpl(gateway, configService, priceCache, meterPriceCache, () -> userService, transactionProvider);
+        lenient().when(configService.resolveDefaultMode()).thenReturn(StripeMode.PRODUCTION);
         final var user = mock(User.class);
         lenient().when(user.getId()).thenReturn("user_test_001");
         lenient().when(userService.getCurrentUser()).thenReturn(user);
@@ -82,7 +85,7 @@ class StripeServiceImplTest {
         final var pi = mock(PaymentIntent.class);
         when(pi.getId()).thenReturn("pi_test_001");
         when(pi.getClientSecret()).thenReturn("pi_test_001_secret");
-        when(gateway.createPaymentIntent(any(), isNull())).thenReturn(pi);
+        when(gateway.createPaymentIntent(any(), isNull(), any())).thenReturn(pi);
 
         final var response = service.createPaymentIntent(CreatePaymentIntentRequest.of(1500L, "usd", "cus_test"));
 
@@ -92,29 +95,29 @@ class StripeServiceImplTest {
 
     @Test
     void createPaymentIntent_passesParamsToGateway() throws StripeException {
-        when(gateway.createPaymentIntent(any(), isNull())).thenReturn(mock(PaymentIntent.class));
+        when(gateway.createPaymentIntent(any(), isNull(), any())).thenReturn(mock(PaymentIntent.class));
 
         service.createPaymentIntent(CreatePaymentIntentRequest.of(2000L, "eur", "cus_eu"));
 
         verify(gateway).createPaymentIntent(argThat(p ->
                 p.getAmount() == 2000L && "eur".equals(p.getCurrency()) && "cus_eu".equals(p.getCustomer())
-        ), isNull());
+        ), isNull(), any());
     }
 
     @Test
     void createPaymentIntent_withIdempotencyKey_passesItToGateway() throws StripeException {
-        when(gateway.createPaymentIntent(any(), eq("idem-key"))).thenReturn(mock(PaymentIntent.class));
+        when(gateway.createPaymentIntent(any(), eq("idem-key"), any())).thenReturn(mock(PaymentIntent.class));
 
         final var request = new CreatePaymentIntentRequest(1000L, "usd", "cus_test",
                 null, null, null, null, "idem-key");
         service.createPaymentIntent(request);
 
-        verify(gateway).createPaymentIntent(any(), eq("idem-key"));
+        verify(gateway).createPaymentIntent(any(), eq("idem-key"), any());
     }
 
     @Test
     void createPaymentIntent_stripeException_wrapsAsInternalServerError() throws StripeException {
-        when(gateway.createPaymentIntent(any(), any())).thenThrow(mock(StripeException.class));
+        when(gateway.createPaymentIntent(any(), any(), any())).thenThrow(mock(StripeException.class));
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.createPaymentIntent(CreatePaymentIntentRequest.of(1000L, "usd", null)));
@@ -122,7 +125,7 @@ class StripeServiceImplTest {
 
     @Test
     void createPaymentIntent_withDescription_passesItToGateway() throws StripeException {
-        when(gateway.createPaymentIntent(any(), any())).thenReturn(mock(PaymentIntent.class));
+        when(gateway.createPaymentIntent(any(), any(), any())).thenReturn(mock(PaymentIntent.class));
 
         final var request = new CreatePaymentIntentRequest(1000L, "usd", "cus_test",
                 "Gold add-on purchase", null, null, null, null);
@@ -130,12 +133,12 @@ class StripeServiceImplTest {
 
         verify(gateway).createPaymentIntent(argThat(p ->
                 "Gold add-on purchase".equals(p.getDescription())
-        ), isNull());
+        ), isNull(), any());
     }
 
     @Test
     void createPaymentIntent_withMetadata_mergesIntoParams() throws StripeException {
-        when(gateway.createPaymentIntent(any(), any())).thenReturn(mock(PaymentIntent.class));
+        when(gateway.createPaymentIntent(any(), any(), any())).thenReturn(mock(PaymentIntent.class));
 
         final var request = new CreatePaymentIntentRequest(1000L, "usd", "cus_test",
                 null, Map.of("addon_id", "addon_001"), null, null, null);
@@ -143,18 +146,18 @@ class StripeServiceImplTest {
 
         verify(gateway).createPaymentIntent(argThat(p ->
                 "addon_001".equals(p.getMetadata().get("addon_id"))
-        ), isNull());
+        ), isNull(), any());
     }
 
     @Test
     void createPaymentIntent_includesUserIdInMetadata() throws StripeException {
-        when(gateway.createPaymentIntent(any(), any())).thenReturn(mock(PaymentIntent.class));
+        when(gateway.createPaymentIntent(any(), any(), any())).thenReturn(mock(PaymentIntent.class));
 
         service.createPaymentIntent(CreatePaymentIntentRequest.of(1000L, "usd", null));
 
         verify(gateway).createPaymentIntent(argThat(p ->
                 "user_test_001".equals(p.getMetadata().get(StripeService.METADATA_USER_ID))
-        ), isNull());
+        ), isNull(), any());
     }
 
     // --- getSubscriptionStatus ---
@@ -165,7 +168,7 @@ class StripeServiceImplTest {
         when(sub.getId()).thenReturn("sub_test_001");
         when(sub.getStatus()).thenReturn("active");
         when(sub.getCurrentPeriodEnd()).thenReturn(1893456000L);
-        when(gateway.retrieveSubscription("sub_test_001")).thenReturn(sub);
+        when(gateway.retrieveSubscription("sub_test_001", StripeMode.PRODUCTION)).thenReturn(sub);
 
         final var response = service.getSubscriptionStatus("sub_test_001");
 
@@ -180,14 +183,14 @@ class StripeServiceImplTest {
         when(sub.getId()).thenReturn("sub_test_002");
         when(sub.getStatus()).thenReturn("canceled");
         when(sub.getCurrentPeriodEnd()).thenReturn(null);
-        when(gateway.retrieveSubscription("sub_test_002")).thenReturn(sub);
+        when(gateway.retrieveSubscription("sub_test_002", StripeMode.PRODUCTION)).thenReturn(sub);
 
         assertNull(service.getSubscriptionStatus("sub_test_002").currentPeriodEnd());
     }
 
     @Test
     void getSubscriptionStatus_stripeException_wrapsAsInternalServerError() throws StripeException {
-        when(gateway.retrieveSubscription(any())).thenThrow(mock(StripeException.class));
+        when(gateway.retrieveSubscription(any(), any())).thenThrow(mock(StripeException.class));
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.getSubscriptionStatus("sub_missing"));
@@ -232,7 +235,7 @@ class StripeServiceImplTest {
     void createBillingPortalSession_mapsUrlFromSession() throws StripeException {
         final var session = mock(Session.class);
         when(session.getUrl()).thenReturn("https://billing.stripe.com/session/abc");
-        when(gateway.createBillingPortalSession(any())).thenReturn(session);
+        when(gateway.createBillingPortalSession(any(), any())).thenReturn(session);
 
         assertEquals("https://billing.stripe.com/session/abc",
                 service.createBillingPortalSession("cus_test", null));
@@ -241,24 +244,24 @@ class StripeServiceImplTest {
     @Test
     void createBillingPortalSession_withReturnUrl_passesItToGateway() throws StripeException {
         final var session = mock(Session.class);
-        when(gateway.createBillingPortalSession(any())).thenReturn(session);
+        when(gateway.createBillingPortalSession(any(), any())).thenReturn(session);
 
         service.createBillingPortalSession("cus_abc", "https://example.com/return");
 
         verify(gateway).createBillingPortalSession(argThat(p ->
                 "https://example.com/return".equals(p.getReturnUrl())
-        ));
+        ), any());
     }
 
     @Test
     void createBillingPortalSession_nullReturnUrl_omitsReturnUrl() throws StripeException {
         final var session = mock(Session.class);
-        when(gateway.createBillingPortalSession(any())).thenReturn(session);
+        when(gateway.createBillingPortalSession(any(), any())).thenReturn(session);
 
         service.createBillingPortalSession("cus_abc", null);
 
         final var captor = ArgumentCaptor.forClass(SessionCreateParams.class);
-        verify(gateway).createBillingPortalSession(captor.capture());
+        verify(gateway).createBillingPortalSession(captor.capture(), any());
         assertNull(captor.getValue().getReturnUrl());
     }
 
@@ -272,7 +275,7 @@ class StripeServiceImplTest {
         when(sub.getCurrentPeriodEnd()).thenReturn(1893456000L);
         when(subscriptionCollection.getData()).thenReturn(List.of(sub));
         when(subscriptionCollection.getHasMore()).thenReturn(false);
-        when(gateway.listSubscriptions(any())).thenReturn(subscriptionCollection);
+        when(gateway.listSubscriptions(any(), any())).thenReturn(subscriptionCollection);
 
         final var result = service.listSubscriptionsByCustomer("cus_test", "active", 10, null);
 
@@ -286,18 +289,18 @@ class StripeServiceImplTest {
     void listSubscriptionsByCustomer_passesStatusToGateway() throws StripeException {
         when(subscriptionCollection.getData()).thenReturn(List.of());
         when(subscriptionCollection.getHasMore()).thenReturn(false);
-        when(gateway.listSubscriptions(any())).thenReturn(subscriptionCollection);
+        when(gateway.listSubscriptions(any(), any())).thenReturn(subscriptionCollection);
 
         service.listSubscriptionsByCustomer("cus_test", "past_due", 10, null);
 
         final var captor = ArgumentCaptor.forClass(SubscriptionListParams.class);
-        verify(gateway).listSubscriptions(captor.capture());
+        verify(gateway).listSubscriptions(captor.capture(), any());
         assertEquals(SubscriptionListParams.Status.PAST_DUE, captor.getValue().getStatus());
     }
 
     @Test
     void listSubscriptionsByCustomer_stripeException_wrapsAsInternalServerError() throws StripeException {
-        when(gateway.listSubscriptions(any())).thenThrow(mock(StripeException.class));
+        when(gateway.listSubscriptions(any(), any())).thenThrow(mock(StripeException.class));
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.listSubscriptionsByCustomer("cus_test", null, 10, null));
@@ -310,7 +313,7 @@ class StripeServiceImplTest {
         service.recordMeterEvent("cus_test", "api_requests", java.math.BigDecimal.valueOf(25), "idem-key-abc");
 
         final var captor = ArgumentCaptor.forClass(com.stripe.param.billing.MeterEventCreateParams.class);
-        verify(gateway).createMeterEvent(captor.capture(), eq("idem-key-abc"));
+        verify(gateway).createMeterEvent(captor.capture(), eq("idem-key-abc"), any());
 
         final var params = captor.getValue();
         assertEquals("api_requests", params.getEventName());
@@ -324,7 +327,7 @@ class StripeServiceImplTest {
         service.recordMeterEvent("cus_test", "api_requests", new java.math.BigDecimal("0.25"), "idem-key-frac");
 
         final var captor = ArgumentCaptor.forClass(com.stripe.param.billing.MeterEventCreateParams.class);
-        verify(gateway).createMeterEvent(captor.capture(), eq("idem-key-frac"));
+        verify(gateway).createMeterEvent(captor.capture(), eq("idem-key-frac"), any());
 
         assertEquals("0.25", captor.getValue().getPayload().get("value"));
     }
@@ -338,7 +341,7 @@ class StripeServiceImplTest {
         when(meter.getId()).thenReturn("mtr_001");
         final var meterCollection = mock(com.stripe.model.billing.MeterCollection.class);
         when(meterCollection.getData()).thenReturn(List.of(meter));
-        when(gateway.listMeters(any())).thenReturn(meterCollection);
+        when(gateway.listMeters(any(), any())).thenReturn(meterCollection);
 
         final var recurring = mock(com.stripe.model.Price.Recurring.class);
         when(recurring.getMeter()).thenReturn("mtr_001");
@@ -356,7 +359,7 @@ class StripeServiceImplTest {
         when(itemCollection.getData()).thenReturn(List.of(item));
         final var sub = mock(Subscription.class);
         when(sub.getItems()).thenReturn(itemCollection);
-        when(gateway.retrieveSubscription("sub_001")).thenReturn(sub);
+        when(gateway.retrieveSubscription("sub_001", StripeMode.PRODUCTION)).thenReturn(sub);
 
         final var result = service.resolvePriceForMeterEventName("api_requests", "sub_001");
 
@@ -372,7 +375,7 @@ class StripeServiceImplTest {
         when(meter.getId()).thenReturn("mtr_001");
         final var meterCollection = mock(com.stripe.model.billing.MeterCollection.class);
         when(meterCollection.getData()).thenReturn(List.of(meter));
-        when(gateway.listMeters(any())).thenReturn(meterCollection);
+        when(gateway.listMeters(any(), any())).thenReturn(meterCollection);
 
         final var otherRecurring = mock(com.stripe.model.Price.Recurring.class);
         when(otherRecurring.getMeter()).thenReturn("mtr_other");
@@ -384,7 +387,7 @@ class StripeServiceImplTest {
         when(itemCollection.getData()).thenReturn(List.of(item));
         final var sub = mock(Subscription.class);
         when(sub.getItems()).thenReturn(itemCollection);
-        when(gateway.retrieveSubscription("sub_001")).thenReturn(sub);
+        when(gateway.retrieveSubscription("sub_001", StripeMode.PRODUCTION)).thenReturn(sub);
 
         assertTrue(service.resolvePriceForMeterEventName("api_requests", "sub_001").isEmpty());
     }
@@ -393,16 +396,16 @@ class StripeServiceImplTest {
     void resolvePriceForMeterEventName_withSubscriptionId_unknownEventName_returnsEmptyWithoutFetchingSubscription() throws StripeException {
         final var meterCollection = mock(com.stripe.model.billing.MeterCollection.class);
         when(meterCollection.getData()).thenReturn(List.of());
-        when(gateway.listMeters(any())).thenReturn(meterCollection);
+        when(gateway.listMeters(any(), any())).thenReturn(meterCollection);
 
         assertTrue(service.resolvePriceForMeterEventName("unknown_event", "sub_001").isEmpty());
-        verify(gateway, never()).retrieveSubscription(any());
+        verify(gateway, never()).retrieveSubscription(any(), any());
     }
 
     @Test
     void resolvePriceForMeterEventName_blankSubscriptionId_fallsBackToCatalogueWideLookup() throws StripeException {
         final var cached = Optional.of(new PriceSummary("price_cached", "prod_001", null, 100L, "usd", "recurring", "month"));
-        when(meterPriceCache.get("api_requests")).thenReturn(cached);
+        when(meterPriceCache.get("PRODUCTION|api_requests")).thenReturn(cached);
 
         final var result = service.resolvePriceForMeterEventName("api_requests", "  ");
 
@@ -413,7 +416,7 @@ class StripeServiceImplTest {
     @Test
     void resolvePriceForMeterEventName_noSubscriptionId_cacheHit_doesNotCallGateway() throws StripeException {
         final var cached = Optional.of(new PriceSummary("price_cached", "prod_001", null, 100L, "usd", "recurring", "month"));
-        when(meterPriceCache.get("api_requests")).thenReturn(cached);
+        when(meterPriceCache.get("PRODUCTION|api_requests")).thenReturn(cached);
 
         assertSame(cached, service.resolvePriceForMeterEventName("api_requests"));
         verifyNoInteractions(gateway);
@@ -427,7 +430,7 @@ class StripeServiceImplTest {
         when(sub.getId()).thenReturn("sub_new");
         when(sub.getStatus()).thenReturn("active");
         when(sub.getCurrentPeriodEnd()).thenReturn(1893456000L);
-        when(gateway.createSubscription(any(), isNull())).thenReturn(sub);
+        when(gateway.createSubscription(any(), isNull(), any())).thenReturn(sub);
 
         final var result = service.createSubscription("cus_test", CreateSubscriptionRequest.of("price_test"));
 
@@ -440,12 +443,12 @@ class StripeServiceImplTest {
     void createSubscription_passesCustomerAndPriceToGateway() throws StripeException {
         final var sub = mock(Subscription.class);
         when(sub.getCurrentPeriodEnd()).thenReturn(null);
-        when(gateway.createSubscription(any(), isNull())).thenReturn(sub);
+        when(gateway.createSubscription(any(), isNull(), any())).thenReturn(sub);
 
         service.createSubscription("cus_abc", CreateSubscriptionRequest.of("price_xyz"));
 
         final var captor = ArgumentCaptor.forClass(SubscriptionCreateParams.class);
-        verify(gateway).createSubscription(captor.capture(), isNull());
+        verify(gateway).createSubscription(captor.capture(), isNull(), any());
         assertEquals("cus_abc", captor.getValue().getCustomer());
         assertEquals("price_xyz", captor.getValue().getItems().getFirst().getPrice());
     }
@@ -454,7 +457,7 @@ class StripeServiceImplTest {
     void createSubscription_withMetadataAndIdempotencyKey_passesThrough() throws StripeException {
         final var sub = mock(Subscription.class);
         when(sub.getCurrentPeriodEnd()).thenReturn(null);
-        when(gateway.createSubscription(any(), eq("sub-idem-key"))).thenReturn(sub);
+        when(gateway.createSubscription(any(), eq("sub-idem-key"), any())).thenReturn(sub);
 
         final var request = new CreateSubscriptionRequest("price_xyz", "Gold plan", Map.of("org_id", "org_001"), "sub-idem-key");
         service.createSubscription("cus_abc", request);
@@ -463,12 +466,12 @@ class StripeServiceImplTest {
                 @SuppressWarnings("unchecked")
                 var meta = (java.util.Map<String, String>) p.getMetadata();
                 return "Gold plan".equals(p.getDescription()) && "org_001".equals(meta.get("org_id"));
-        }), eq("sub-idem-key"));
+        }), eq("sub-idem-key"), any());
     }
 
     @Test
     void createSubscription_stripeException_wrapsAppropriately() throws StripeException {
-        when(gateway.createSubscription(any(), any())).thenThrow(mock(StripeException.class));
+        when(gateway.createSubscription(any(), any(), any())).thenThrow(mock(StripeException.class));
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.createSubscription("cus_test", CreateSubscriptionRequest.of("price_test")));
@@ -482,7 +485,7 @@ class StripeServiceImplTest {
         when(sub.getId()).thenReturn("sub_cancel");
         when(sub.getStatus()).thenReturn("canceled");
         when(sub.getCurrentPeriodEnd()).thenReturn(null);
-        when(gateway.cancelSubscription("sub_cancel")).thenReturn(sub);
+        when(gateway.cancelSubscription("sub_cancel", StripeMode.PRODUCTION)).thenReturn(sub);
 
         final var result = service.cancelSubscription("sub_cancel");
 
@@ -493,7 +496,7 @@ class StripeServiceImplTest {
 
     @Test
     void cancelSubscription_stripeException_wrapsAppropriately() throws StripeException {
-        when(gateway.cancelSubscription(any())).thenThrow(mock(StripeException.class));
+        when(gateway.cancelSubscription(any(), any())).thenThrow(mock(StripeException.class));
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.cancelSubscription("sub_test"));
@@ -520,7 +523,7 @@ class StripeServiceImplTest {
         when(product.getActive()).thenReturn(true);
         when(product.getDefaultPriceObject()).thenReturn(price);
         when(productCollection.getData()).thenReturn(List.of(product));
-        when(gateway.listProducts(any())).thenReturn(productCollection);
+        when(gateway.listProducts(any(), any())).thenReturn(productCollection);
 
         final var result = service.listProducts(true, 10);
 
@@ -545,7 +548,7 @@ class StripeServiceImplTest {
         when(product.getActive()).thenReturn(true);
         when(product.getDefaultPriceObject()).thenReturn(null);
         when(productCollection.getData()).thenReturn(List.of(product));
-        when(gateway.listProducts(any())).thenReturn(productCollection);
+        when(gateway.listProducts(any(), any())).thenReturn(productCollection);
 
         final var result = service.listProducts(true, 10);
 
@@ -555,12 +558,12 @@ class StripeServiceImplTest {
     @Test
     void listProducts_passesFiltersAndExpandToGateway() throws StripeException {
         when(productCollection.getData()).thenReturn(List.of());
-        when(gateway.listProducts(any())).thenReturn(productCollection);
+        when(gateway.listProducts(any(), any())).thenReturn(productCollection);
 
         service.listProducts(false, 50);
 
         final var captor = ArgumentCaptor.forClass(com.stripe.param.ProductListParams.class);
-        verify(gateway).listProducts(captor.capture());
+        verify(gateway).listProducts(captor.capture(), any());
         final var params = captor.getValue();
         assertEquals(Boolean.FALSE, params.getActive());
         assertEquals(50L, params.getLimit());
@@ -583,7 +586,7 @@ class StripeServiceImplTest {
         when(recurring.getInterval()).thenReturn("month");
         when(price.getRecurring()).thenReturn(recurring);
         when(priceCollection.getData()).thenReturn(List.of(price));
-        when(gateway.listPrices(any())).thenReturn(priceCollection);
+        when(gateway.listPrices(any(), any())).thenReturn(priceCollection);
 
         final var result = service.listPrices("prod_001", true, 10);
 
@@ -605,12 +608,12 @@ class StripeServiceImplTest {
     void listPrices_passesFiltersToGateway() throws StripeException {
         when(priceCache.get(any())).thenReturn(null);
         when(priceCollection.getData()).thenReturn(List.of());
-        when(gateway.listPrices(any())).thenReturn(priceCollection);
+        when(gateway.listPrices(any(), any())).thenReturn(priceCollection);
 
         service.listPrices("prod_filter", false, 25);
 
         final var captor = ArgumentCaptor.forClass(PriceListParams.class);
-        verify(gateway).listPrices(captor.capture());
+        verify(gateway).listPrices(captor.capture(), any());
         assertEquals("prod_filter", captor.getValue().getProduct());
         assertEquals(Boolean.FALSE, captor.getValue().getActive());
         assertEquals(25L, captor.getValue().getLimit());
@@ -630,7 +633,7 @@ class StripeServiceImplTest {
         final var recurring = mock(com.stripe.model.Price.Recurring.class);
         when(recurring.getInterval()).thenReturn("month");
         when(price.getRecurring()).thenReturn(recurring);
-        when(gateway.retrievePrice("price_single")).thenReturn(price);
+        when(gateway.retrievePrice("price_single", StripeMode.PRODUCTION)).thenReturn(price);
 
         final var result = service.retrievePrice("price_single");
 
@@ -647,7 +650,7 @@ class StripeServiceImplTest {
         when(customer.getId()).thenReturn("cus_found");
         final var searchResult = mock(CustomerSearchResult.class);
         when(searchResult.getData()).thenReturn(List.of(customer));
-        when(gateway.searchCustomers(any())).thenReturn(searchResult);
+        when(gateway.searchCustomers(any(), any())).thenReturn(searchResult);
 
         assertTrue(service.findCustomerByMetadata("orgId", "org_001").isPresent());
         assertEquals("cus_found", service.findCustomerByMetadata("orgId", "org_001").get());
@@ -657,7 +660,7 @@ class StripeServiceImplTest {
     void findCustomerByMetadata_notFound_returnsEmpty() throws StripeException {
         final var searchResult = mock(CustomerSearchResult.class);
         when(searchResult.getData()).thenReturn(List.of());
-        when(gateway.searchCustomers(any())).thenReturn(searchResult);
+        when(gateway.searchCustomers(any(), any())).thenReturn(searchResult);
 
         assertTrue(service.findCustomerByMetadata("orgId", "org_missing").isEmpty());
     }
@@ -669,7 +672,7 @@ class StripeServiceImplTest {
         final var session = mock(com.stripe.model.checkout.Session.class);
         when(session.getId()).thenReturn("cs_test_001");
         when(session.getUrl()).thenReturn("https://checkout.stripe.com/pay/cs_test_001");
-        when(gateway.createCheckoutSession(any(), isNull())).thenReturn(session);
+        when(gateway.createCheckoutSession(any(), isNull(), any())).thenReturn(session);
 
         final var request = new CreateCheckoutSessionRequest(
                 "cus_test", "price_001", "https://example.com/success", "https://example.com/cancel", null, null, null);
@@ -681,18 +684,18 @@ class StripeServiceImplTest {
     @Test
     void createCheckoutSession_withIdempotencyKey_passesItToGateway() throws StripeException {
         final var session = mock(com.stripe.model.checkout.Session.class);
-        when(gateway.createCheckoutSession(any(), eq("checkout-idem"))).thenReturn(session);
+        when(gateway.createCheckoutSession(any(), eq("checkout-idem"), any())).thenReturn(session);
 
         final var request = new CreateCheckoutSessionRequest(
                 "cus_test", "price_001", "https://example.com/success", "https://example.com/cancel", null, "checkout-idem", null);
         service.createCheckoutSession(request);
 
-        verify(gateway).createCheckoutSession(any(), eq("checkout-idem"));
+        verify(gateway).createCheckoutSession(any(), eq("checkout-idem"), any());
     }
 
     @Test
     void createCheckoutSession_nullMode_defaultsToSubscription() throws StripeException {
-        when(gateway.createCheckoutSession(any(), any())).thenReturn(mock(com.stripe.model.checkout.Session.class));
+        when(gateway.createCheckoutSession(any(), any(), any())).thenReturn(mock(com.stripe.model.checkout.Session.class));
 
         final var request = new CreateCheckoutSessionRequest(
                 "cus_test", "price_001", "https://example.com/success", "https://example.com/cancel", null, null, null);
@@ -700,12 +703,12 @@ class StripeServiceImplTest {
 
         verify(gateway).createCheckoutSession(argThat(p ->
                 p.getMode() == com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION
-        ), isNull());
+        ), isNull(), any());
     }
 
     @Test
     void createCheckoutSession_withMetadata_propagatesToSessionAndSubscriptionData() throws StripeException {
-        when(gateway.createCheckoutSession(any(), any())).thenReturn(mock(com.stripe.model.checkout.Session.class));
+        when(gateway.createCheckoutSession(any(), any(), any())).thenReturn(mock(com.stripe.model.checkout.Session.class));
 
         final var meta = Map.of("orgId", "org_001", "addonId", "addon_xyz");
         final var request = new CreateCheckoutSessionRequest(
@@ -719,12 +722,12 @@ class StripeServiceImplTest {
             if (sessionMeta == null || subData == null) return false;
             final var subMeta = subData.getMetadata();
             return sessionMeta.containsKey("orgId") && subMeta != null && subMeta.containsKey("orgId");
-        }), isNull());
+        }), isNull(), any());
     }
 
     @Test
     void createCheckoutSession_withMetadataAndPaymentMode_propagatesToPaymentIntentData() throws StripeException {
-        when(gateway.createCheckoutSession(any(), any())).thenReturn(mock(com.stripe.model.checkout.Session.class));
+        when(gateway.createCheckoutSession(any(), any(), any())).thenReturn(mock(com.stripe.model.checkout.Session.class));
 
         final var meta = Map.of("orgId", "org_002");
         final var request = new CreateCheckoutSessionRequest(
@@ -737,7 +740,7 @@ class StripeServiceImplTest {
             if (piData == null) return false;
             final var piMeta = piData.getMetadata();
             return piMeta != null && piMeta.containsKey("orgId");
-        }), isNull());
+        }), isNull(), any());
     }
 
     // --- listInvoices ---
@@ -752,7 +755,7 @@ class StripeServiceImplTest {
         when(invoice.getStatus()).thenReturn("paid");
         when(invoice.getCreated()).thenReturn(1893456000L);
         when(invoiceCollection.getData()).thenReturn(List.of(invoice));
-        when(gateway.listInvoices(any())).thenReturn(invoiceCollection);
+        when(gateway.listInvoices(any(), any())).thenReturn(invoiceCollection);
 
         final var result = service.listInvoices("cus_test", 10, null);
 
@@ -769,7 +772,7 @@ class StripeServiceImplTest {
     @Test
     void listInvoices_passesLimitAndCursorToGateway() throws StripeException {
         when(invoiceCollection.getData()).thenReturn(List.of());
-        when(gateway.listInvoices(any())).thenReturn(invoiceCollection);
+        when(gateway.listInvoices(any(), any())).thenReturn(invoiceCollection);
 
         service.listInvoices("cus_test", 20, "in_cursor");
 
@@ -777,12 +780,12 @@ class StripeServiceImplTest {
                 "cus_test".equals(p.getCustomer())
                 && p.getLimit() == 20L
                 && "in_cursor".equals(p.getStartingAfter())
-        ));
+        ), any());
     }
 
     @Test
     void listInvoices_stripeException_wrapsAppropriately() throws StripeException {
-        when(gateway.listInvoices(any())).thenThrow(mock(StripeException.class));
+        when(gateway.listInvoices(any(), any())).thenThrow(mock(StripeException.class));
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.listInvoices("cus_test", 10, null));
@@ -792,27 +795,27 @@ class StripeServiceImplTest {
 
     @Test
     void updateCustomer_callsGatewayWithParams() throws StripeException {
-        when(gateway.updateCustomer(eq("cus_test"), any())).thenReturn(mock(Customer.class));
+        when(gateway.updateCustomer(eq("cus_test"), any(), any())).thenReturn(mock(Customer.class));
 
         service.updateCustomer("cus_test", "new@example.com", "New Name");
 
         verify(gateway).updateCustomer(eq("cus_test"), argThat(p ->
                 "new@example.com".equals(p.getEmail()) && "New Name".equals(p.getName())
-        ));
+        ), any());
     }
 
     @Test
     void updateCustomer_nullEmail_omitsEmailFromParams() throws StripeException {
-        when(gateway.updateCustomer(any(), any())).thenReturn(mock(Customer.class));
+        when(gateway.updateCustomer(any(), any(), any())).thenReturn(mock(Customer.class));
 
         service.updateCustomer("cus_test", null, "New Name");
 
-        verify(gateway).updateCustomer(any(), argThat(p -> p.getEmail() == null));
+        verify(gateway).updateCustomer(any(), argThat(p -> p.getEmail() == null), any());
     }
 
     @Test
     void updateCustomer_stripeException_wrapsAppropriately() throws StripeException {
-        when(gateway.updateCustomer(any(), any())).thenThrow(mock(StripeException.class));
+        when(gateway.updateCustomer(any(), any(), any())).thenThrow(mock(StripeException.class));
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.updateCustomer("cus_test", "x@x.com", "X"));

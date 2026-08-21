@@ -63,6 +63,34 @@ class StripeWebhookEndpointTest {
         verifyNoMoreInteractions(element);
     }
 
+    // --- mode-scoped path ---
+
+    @Test
+    void modeScopedPath_validMode_verifiesAndDispatches() throws Exception {
+
+        final String payload = """
+                {"id":"evt_mode_1","object":"event","api_version":"2024-04-10",
+                 "created":1234567890,"livemode":false,
+                 "type":"payment_intent.canceled",
+                 "data":{"object":{"id":"pi_mode_1","object":"payment_intent",
+                 "amount":500,"currency":"usd","status":"canceled",
+                 "customer":"cus_mode_1"}}}""";
+
+        final var response = endpoint.receiveWebhook(payload, sig(payload), "production");
+
+        assertEquals(200, response.getStatus());
+        assertSingleTyped(captureAllPublished(), StripePaymentCanceledEvent.class);
+    }
+
+    @Test
+    void modeScopedPath_invalidMode_returns400() {
+
+        final var response = endpoint.receiveWebhook("{}", "t=0,v1=badsig", "not-a-mode");
+
+        assertEquals(400, response.getStatus());
+        verifyNoMoreInteractions(element);
+    }
+
     // --- raw event: always published ---
 
     @Test

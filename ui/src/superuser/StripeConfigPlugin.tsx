@@ -6,11 +6,70 @@ interface StripeConfig {
   webhookSecret: string
 }
 
+interface StripeDualConfig {
+  production: StripeConfig
+  sandbox: StripeConfig
+}
+
 const CONFIG_URL = '/element/stripe/api/stripe/config'
 
+const EMPTY_CONFIG: StripeConfig = { apiKey: '', webhookSecret: '' }
+
+function ConfigFields({
+  title,
+  description,
+  apiKeyPlaceholder,
+  config,
+  onChange,
+}: {
+  title: string
+  description: string
+  apiKeyPlaceholder: string
+  config: StripeConfig
+  onChange: (config: StripeConfig) => void
+}) {
+  return (
+    <fieldset className="space-y-5">
+      <div>
+        <legend className="text-lg font-semibold">{title}</legend>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium">API Key</label>
+        <input
+          type="password"
+          value={config.apiKey}
+          onChange={e => onChange({ ...config, apiKey: e.target.value })}
+          placeholder={apiKeyPlaceholder}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <p className="text-xs text-muted-foreground">
+          The Stripe secret key used for PaymentIntent and Subscription API calls.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium">Webhook Signing Secret</label>
+        <input
+          type="password"
+          value={config.webhookSecret}
+          onChange={e => onChange({ ...config, webhookSecret: e.target.value })}
+          placeholder="whsec_…"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <p className="text-xs text-muted-foreground">
+          Found in the Stripe Dashboard under Developers &rarr; Webhooks. Must use the
+          Account (not v2) webhook type.
+        </p>
+      </div>
+    </fieldset>
+  )
+}
+
 export function StripeConfigPlugin() {
-  const [apiKey, setApiKey] = React.useState('')
-  const [webhookSecret, setWebhookSecret] = React.useState('')
+  const [production, setProduction] = React.useState<StripeConfig>(EMPTY_CONFIG)
+  const [sandbox, setSandbox] = React.useState<StripeConfig>(EMPTY_CONFIG)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
   const [saved, setSaved] = React.useState(false)
@@ -21,9 +80,9 @@ export function StripeConfigPlugin() {
       try {
         const res = await fetch(CONFIG_URL, { credentials: 'include', headers: sessionHeaders() })
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-        const data: StripeConfig = await res.json()
-        setApiKey(data.apiKey)
-        setWebhookSecret(data.webhookSecret)
+        const data: StripeDualConfig = await res.json()
+        setProduction(data.production)
+        setSandbox(data.sandbox)
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -43,7 +102,7 @@ export function StripeConfigPlugin() {
         method: 'PUT',
         credentials: 'include',
         headers: sessionHeaders(),
-        body: JSON.stringify({ apiKey, webhookSecret }),
+        body: JSON.stringify({ production, sandbox }),
       })
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       setSaved(true)
@@ -67,39 +126,28 @@ export function StripeConfigPlugin() {
       <h1 className="text-2xl font-bold mb-1">Stripe Configuration</h1>
       <p className="text-sm text-muted-foreground mb-6">
         Credentials are stored in the database and override the Element&rsquo;s default
-        attributes. Values are masked on load.
+        attributes. Values are masked on load. Both sets of credentials can be configured at
+        once and selected per request via the <code>X-Stripe-Mode</code> header; requests that
+        omit the header use production if configured, sandbox otherwise.
       </p>
 
-      <form onSubmit={handleSave} className="space-y-5">
+      <form onSubmit={handleSave} className="space-y-8">
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">API Key</label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={e => { setApiKey(e.target.value); setSaved(false) }}
-            placeholder="sk_live_\u2026 or sk_test_\u2026"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <p className="text-xs text-muted-foreground">
-            The Stripe secret key used for PaymentIntent and Subscription API calls.
-          </p>
-        </div>
+        <ConfigFields
+          title="Production"
+          description="Live-mode credentials used by default."
+          apiKeyPlaceholder="sk_live_…"
+          config={production}
+          onChange={config => { setProduction(config); setSaved(false) }}
+        />
 
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">Webhook Signing Secret</label>
-          <input
-            type="password"
-            value={webhookSecret}
-            onChange={e => { setWebhookSecret(e.target.value); setSaved(false) }}
-            placeholder="whsec_\u2026"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <p className="text-xs text-muted-foreground">
-            Found in the Stripe Dashboard under Developers &rarr; Webhooks. Must use the
-            Account (not v2) webhook type.
-          </p>
-        </div>
+        <ConfigFields
+          title="Sandbox"
+          description="Test-mode credentials, selected via X-Stripe-Mode: sandbox."
+          apiKeyPlaceholder="sk_test_…"
+          config={sandbox}
+          onChange={config => { setSandbox(config); setSaved(false) }}
+        />
 
         {error && (
           <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
@@ -118,7 +166,7 @@ export function StripeConfigPlugin() {
           disabled={saving}
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
         >
-          {saving ? 'Saving\u2026' : 'Save Configuration'}
+          {saving ? 'Saving…' : 'Save Configuration'}
         </button>
 
       </form>

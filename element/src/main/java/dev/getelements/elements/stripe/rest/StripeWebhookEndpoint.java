@@ -29,6 +29,7 @@ import dev.getelements.elements.stripe.event.StripeSubscriptionCreatedEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionTrialWillEndEvent;
 import dev.getelements.elements.stripe.event.StripeSubscriptionUpdatedEvent;
 import dev.getelements.elements.stripe.model.StripeConfig;
+import dev.getelements.elements.stripe.model.StripeMode;
 import dev.getelements.elements.stripe.service.StripeConfigService;
 import dev.getelements.elements.stripe.service.StripeEventLogService;
 import dev.getelements.elements.stripe.service.StripeService;
@@ -38,6 +39,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -111,7 +113,11 @@ public class StripeWebhookEndpoint {
         this.element = element;
         this.configService = new StripeConfigService() {
             @Override public StripeConfig getConfig() { return new StripeConfig("", webhookSecret); }
+            @Override public StripeConfig getConfig(StripeMode mode) { return getConfig(); }
+            @Override public StripeConfig getRawConfig(StripeMode mode) { return getConfig(); }
+            @Override public StripeMode resolveDefaultMode() { return StripeMode.PRODUCTION; }
             @Override public void saveConfig(StripeConfig c) {}
+            @Override public void saveConfig(StripeConfig c, StripeMode mode) {}
         };
         this.stripeService = stripeService;
         this.eventLogService = eventLogService;
@@ -122,13 +128,45 @@ public class StripeWebhookEndpoint {
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
             summary = "Stripe webhook receiver",
-            description = "Receives and verifies Stripe webhook events, then publishes typed internal events."
+            description = "Receives and verifies Stripe webhook events, then publishes typed internal events. " +
+                    "Uses production's webhook secret if configured, sandbox's otherwise. Prefer the mode-scoped " +
+                    "/stripe/webhook/{mode} endpoints when running both accounts side by side."
     )
     public Response receiveWebhook(
             String payload,
             @HeaderParam("Stripe-Signature") String sigHeader) {
+        return processWebhook(payload, sigHeader, configService.getConfig().webhookSecret());
+    }
 
-        final var secret = configService.getConfig().webhookSecret();
+    @POST
+    @Path("/{mode}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Stripe webhook receiver (mode-scoped)",
+            description = "Receives and verifies Stripe webhook events for a specific mode. Configure this as a " +
+                    "distinct webhook endpoint (with its own signing secret) per Stripe account in each " +
+                    "dashboard, e.g. .../stripe/webhook/production and .../stripe/webhook/sandbox."
+    )
+    public Response receiveWebhook(
+            String payload,
+            @HeaderParam("Stripe-Signature") String sigHeader,
+            @PathParam("mode") String modePathParam) {
+
+        final StripeMode mode;
+
+        try {
+            mode = StripeMode.valueOf(modePathParam.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("{\"error\":\"Invalid mode: " + modePathParam + "\"}")
+                    .build();
+        }
+
+        return processWebhook(payload, sigHeader, configService.getConfig(mode).webhookSecret());
+    }
+
+    private Response processWebhook(String payload, String sigHeader, String secret) {
 
         if (secret == null || secret.isBlank()) {
             return Response.status(503)

@@ -39,7 +39,7 @@ public class StripeCustomerIT {
     }
 
     private static StripeServiceImpl service() {
-        return new StripeServiceImpl(new LiveStripeGateway(), mock(StripePriceCache.class), mock(StripeMeterPriceCache.class), null, null);
+        return new StripeServiceImpl(new LiveStripeGateway(), new StripeConfigServiceStub(), mock(StripePriceCache.class), mock(StripeMeterPriceCache.class), null, null);
     }
 
     // ---- createCustomer -----------------------------------------------------

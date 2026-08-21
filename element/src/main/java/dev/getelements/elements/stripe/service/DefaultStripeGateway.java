@@ -36,6 +36,7 @@ import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.billing.MeterEventCreateParams;
 import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.billingportal.SessionCreateParams;
+import dev.getelements.elements.stripe.model.StripeMode;
 import jakarta.ws.rs.InternalServerErrorException;
 
 public class DefaultStripeGateway implements StripeGateway {
@@ -49,114 +50,212 @@ public class DefaultStripeGateway implements StripeGateway {
 
     @Override
     public Customer createCustomer(CustomerCreateParams params) throws StripeException {
-        return Customer.create(params, options());
+        return createCustomer(params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Customer createCustomer(CustomerCreateParams params, StripeMode mode) throws StripeException {
+        return Customer.create(params, options(mode));
     }
 
     @Override
     public Customer updateCustomer(String customerId, CustomerUpdateParams params) throws StripeException {
-        return Customer.retrieve(customerId, options()).update(params, options());
+        return updateCustomer(customerId, params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Customer updateCustomer(String customerId, CustomerUpdateParams params, StripeMode mode) throws StripeException {
+        return Customer.retrieve(customerId, options(mode)).update(params, options(mode));
     }
 
     @Override
     public SetupIntent createSetupIntent(SetupIntentCreateParams params) throws StripeException {
-        return SetupIntent.create(params, options());
+        return createSetupIntent(params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public SetupIntent createSetupIntent(SetupIntentCreateParams params, StripeMode mode) throws StripeException {
+        return SetupIntent.create(params, options(mode));
     }
 
     @Override
     public PaymentMethodCollection listPaymentMethods(String customerId, CustomerListPaymentMethodsParams params) throws StripeException {
-        return Customer.retrieve(customerId, options()).listPaymentMethods(params, options());
+        return listPaymentMethods(customerId, params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public PaymentMethodCollection listPaymentMethods(String customerId, CustomerListPaymentMethodsParams params, StripeMode mode) throws StripeException {
+        return Customer.retrieve(customerId, options(mode)).listPaymentMethods(params, options(mode));
     }
 
     @Override
     public PaymentIntent createPaymentIntent(PaymentIntentCreateParams params, String idempotencyKey) throws StripeException {
-        return PaymentIntent.create(params, options(idempotencyKey));
+        return createPaymentIntent(params, idempotencyKey, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public PaymentIntent createPaymentIntent(PaymentIntentCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
+        return PaymentIntent.create(params, options(mode, idempotencyKey));
     }
 
     @Override
     public Subscription retrieveSubscription(String subscriptionId) throws StripeException {
-        return Subscription.retrieve(subscriptionId, options());
+        return retrieveSubscription(subscriptionId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Subscription retrieveSubscription(String subscriptionId, StripeMode mode) throws StripeException {
+        return Subscription.retrieve(subscriptionId, options(mode));
     }
 
     @Override
     public SubscriptionCollection listSubscriptions(SubscriptionListParams params) throws StripeException {
-        return Subscription.list(params, options());
+        return listSubscriptions(params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public SubscriptionCollection listSubscriptions(SubscriptionListParams params, StripeMode mode) throws StripeException {
+        return Subscription.list(params, options(mode));
     }
 
     @Override
     public Subscription createSubscription(SubscriptionCreateParams params, String idempotencyKey) throws StripeException {
-        return Subscription.create(params, options(idempotencyKey));
+        return createSubscription(params, idempotencyKey, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Subscription createSubscription(SubscriptionCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
+        return Subscription.create(params, options(mode, idempotencyKey));
     }
 
     @Override
     public Subscription cancelSubscription(String subscriptionId) throws StripeException {
-        return Subscription.retrieve(subscriptionId, options()).cancel((SubscriptionCancelParams) null, options());
+        return cancelSubscription(subscriptionId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Subscription cancelSubscription(String subscriptionId, StripeMode mode) throws StripeException {
+        return Subscription.retrieve(subscriptionId, options(mode)).cancel((SubscriptionCancelParams) null, options(mode));
     }
 
     @Override
     public Session createBillingPortalSession(SessionCreateParams params) throws StripeException {
-        return Session.create(params, options());
+        return createBillingPortalSession(params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Session createBillingPortalSession(SessionCreateParams params, StripeMode mode) throws StripeException {
+        return Session.create(params, options(mode));
     }
 
     @Override
     public MeterEvent createMeterEvent(MeterEventCreateParams params, String idempotencyKey) throws StripeException {
-        return MeterEvent.create(params, options(idempotencyKey));
+        return createMeterEvent(params, idempotencyKey, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public MeterEvent createMeterEvent(MeterEventCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
+        return MeterEvent.create(params, options(mode, idempotencyKey));
     }
 
     @Override
     public ProductCollection listProducts(ProductListParams params) throws StripeException {
-        return Product.list(params, options());
+        return listProducts(params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public ProductCollection listProducts(ProductListParams params, StripeMode mode) throws StripeException {
+        return Product.list(params, options(mode));
     }
 
     @Override
     public PriceCollection listPrices(PriceListParams params) throws StripeException {
-        return Price.list(params, options());
+        return listPrices(params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public PriceCollection listPrices(PriceListParams params, StripeMode mode) throws StripeException {
+        return Price.list(params, options(mode));
     }
 
     @Override
     public Price retrievePrice(String priceId) throws StripeException {
-        return Price.retrieve(priceId, options());
+        return retrievePrice(priceId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Price retrievePrice(String priceId, StripeMode mode) throws StripeException {
+        return Price.retrieve(priceId, options(mode));
     }
 
     @Override
     public Product retrieveProduct(String productId) throws StripeException {
+        return retrieveProduct(productId, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public Product retrieveProduct(String productId, StripeMode mode) throws StripeException {
         final var params = ProductRetrieveParams.builder()
                 .addExpand("default_price")
                 .build();
-        return Product.retrieve(productId, params, options());
+        return Product.retrieve(productId, params, options(mode));
     }
 
     @Override
     public MeterCollection listMeters(MeterListParams params) throws StripeException {
-        return Meter.list(params, options());
+        return listMeters(params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public MeterCollection listMeters(MeterListParams params, StripeMode mode) throws StripeException {
+        return Meter.list(params, options(mode));
     }
 
     @Override
     public CustomerSearchResult searchCustomers(CustomerSearchParams params) throws StripeException {
-        return Customer.search(params, options());
+        return searchCustomers(params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public CustomerSearchResult searchCustomers(CustomerSearchParams params, StripeMode mode) throws StripeException {
+        return Customer.search(params, options(mode));
     }
 
     @Override
     public InvoiceCollection listInvoices(InvoiceListParams params) throws StripeException {
-        return Invoice.list(params, options());
+        return listInvoices(params, configService.resolveDefaultMode());
+    }
+
+    @Override
+    public InvoiceCollection listInvoices(InvoiceListParams params, StripeMode mode) throws StripeException {
+        return Invoice.list(params, options(mode));
     }
 
     @Override
     public com.stripe.model.checkout.Session createCheckoutSession(
             com.stripe.param.checkout.SessionCreateParams params,
             String idempotencyKey) throws StripeException {
-        return com.stripe.model.checkout.Session.create(params, options(idempotencyKey));
+        return createCheckoutSession(params, idempotencyKey, configService.resolveDefaultMode());
     }
 
-    private RequestOptions options() {
-        return options(null);
+    @Override
+    public com.stripe.model.checkout.Session createCheckoutSession(
+            com.stripe.param.checkout.SessionCreateParams params,
+            String idempotencyKey,
+            StripeMode mode) throws StripeException {
+        return com.stripe.model.checkout.Session.create(params, options(mode, idempotencyKey));
     }
 
-    private RequestOptions options(String idempotencyKey) {
+    private RequestOptions options(StripeMode mode) {
+        return options(mode, null);
+    }
 
-        final var apiKey = configService.getConfig().apiKey();
+    private RequestOptions options(StripeMode mode, String idempotencyKey) {
+
+        final var apiKey = configService.getConfig(mode).apiKey();
 
         if (apiKey == null || apiKey.isBlank()) {
-            throw new InternalServerErrorException("Stripe API key not configured");
+            throw new InternalServerErrorException("Stripe API key not configured for mode " + mode);
         }
 
         final var builder = RequestOptions.builder().setApiKey(apiKey);

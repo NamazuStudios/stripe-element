@@ -12,6 +12,7 @@ import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
 import dev.getelements.elements.stripe.model.RecordMeterEventRequest;
+import dev.getelements.elements.stripe.model.StripeMode;
 import dev.getelements.elements.stripe.model.SubscriptionListResponse;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 import dev.getelements.elements.stripe.model.UpdateCustomerRequest;
@@ -19,12 +20,15 @@ import dev.getelements.elements.stripe.model.UpdateCustomerRequest;
 import java.util.List;
 import dev.getelements.elements.stripe.service.StripeService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -40,6 +44,12 @@ import static dev.getelements.elements.stripe.StripeApplication.OPENAPI_TAG;
 @Tag(name = OPENAPI_TAG)
 @Path("/stripe")
 public class StripePaymentEndpoint {
+
+    /**
+     * Selects sandbox vs. production for this call. Omit to fall back to production if
+     * configured, sandbox otherwise.
+     */
+    public static final String MODE_HEADER = "X-Stripe-Mode";
 
     private final StripeService stripeService;
 
@@ -64,8 +74,13 @@ public class StripePaymentEndpoint {
                     "Supply an idempotencyKey to safely retry without double-charging.",
             security = {@SecurityRequirement(name = SESSION_SECRET)}
     )
-    public CreatePaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request) {
-        return stripeService.createPaymentIntent(request);
+    public CreatePaymentIntentResponse createPaymentIntent(
+            CreatePaymentIntentRequest request,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.createPaymentIntent(request, mode)
+                : stripeService.createPaymentIntent(request);
     }
 
     @PATCH
@@ -78,8 +93,14 @@ public class StripePaymentEndpoint {
     )
     public Response updateCustomer(
             @PathParam("customerId") String customerId,
-            UpdateCustomerRequest request) {
-        stripeService.updateCustomer(customerId, request.email(), request.name());
+            UpdateCustomerRequest request,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        if (mode != null) {
+            stripeService.updateCustomer(customerId, request.email(), request.name(), mode);
+        } else {
+            stripeService.updateCustomer(customerId, request.email(), request.name());
+        }
         return Response.noContent().build();
     }
 
@@ -91,8 +112,13 @@ public class StripePaymentEndpoint {
             description = "Retrieves the current status of a Stripe subscription.",
             security = {@SecurityRequirement(name = SESSION_SECRET)}
     )
-    public SubscriptionStatusResponse getSubscriptionStatus(@PathParam("subscriptionId") String subscriptionId) {
-        return stripeService.getSubscriptionStatus(subscriptionId);
+    public SubscriptionStatusResponse getSubscriptionStatus(
+            @PathParam("subscriptionId") String subscriptionId,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.getSubscriptionStatus(subscriptionId, mode)
+                : stripeService.getSubscriptionStatus(subscriptionId);
     }
 
     @DELETE
@@ -104,8 +130,13 @@ public class StripePaymentEndpoint {
                     "Returns the final subscription status with status = 'canceled'.",
             security = {@SecurityRequirement(name = SESSION_SECRET)}
     )
-    public SubscriptionStatusResponse cancelSubscription(@PathParam("subscriptionId") String subscriptionId) {
-        return stripeService.cancelSubscription(subscriptionId);
+    public SubscriptionStatusResponse cancelSubscription(
+            @PathParam("subscriptionId") String subscriptionId,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.cancelSubscription(subscriptionId, mode)
+                : stripeService.cancelSubscription(subscriptionId);
     }
 
     @POST
@@ -118,8 +149,13 @@ public class StripePaymentEndpoint {
     )
     public CreatePortalSessionResponse createPortalSession(
             @PathParam("customerId") String customerId,
-            @QueryParam("returnUrl") String returnUrl) {
-        return new CreatePortalSessionResponse(stripeService.createBillingPortalSession(customerId, returnUrl));
+            @QueryParam("returnUrl") String returnUrl,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        final var url = mode != null
+                ? stripeService.createBillingPortalSession(customerId, returnUrl, mode)
+                : stripeService.createBillingPortalSession(customerId, returnUrl);
+        return new CreatePortalSessionResponse(url);
     }
 
     @GET
@@ -132,8 +168,12 @@ public class StripePaymentEndpoint {
     )
     public List<ProductSummary> listProducts(
             @QueryParam("active") @DefaultValue("true") boolean activeOnly,
-            @QueryParam("limit") @DefaultValue("100") int limit) {
-        return stripeService.listProducts(activeOnly, limit);
+            @QueryParam("limit") @DefaultValue("100") int limit,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.listProducts(activeOnly, limit, mode)
+                : stripeService.listProducts(activeOnly, limit);
     }
 
     @GET
@@ -148,8 +188,12 @@ public class StripePaymentEndpoint {
     public List<PriceSummary> listPrices(
             @QueryParam("productId") String productId,
             @QueryParam("active") @DefaultValue("true") boolean activeOnly,
-            @QueryParam("limit") @DefaultValue("100") int limit) {
-        return stripeService.listPrices(productId, activeOnly, limit);
+            @QueryParam("limit") @DefaultValue("100") int limit,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.listPrices(productId, activeOnly, limit, mode)
+                : stripeService.listPrices(productId, activeOnly, limit);
     }
 
     @GET
@@ -160,8 +204,13 @@ public class StripePaymentEndpoint {
             description = "Fetches a price directly by ID — useful when you have a price ID but not the product ID.",
             security = {@SecurityRequirement(name = SESSION_SECRET)}
     )
-    public PriceSummary retrievePrice(@PathParam("priceId") String priceId) {
-        return stripeService.retrievePrice(priceId);
+    public PriceSummary retrievePrice(
+            @PathParam("priceId") String priceId,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.retrievePrice(priceId, mode)
+                : stripeService.retrievePrice(priceId);
     }
 
     @GET
@@ -175,8 +224,13 @@ public class StripePaymentEndpoint {
     )
     public CreateCustomerResponse findCustomerByMetadata(
             @QueryParam("key") String key,
-            @QueryParam("value") String value) {
-        return stripeService.findCustomerByMetadata(key, value)
+            @QueryParam("value") String value,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        final var result = mode != null
+                ? stripeService.findCustomerByMetadata(key, value, mode)
+                : stripeService.findCustomerByMetadata(key, value);
+        return result
                 .map(CreateCustomerResponse::new)
                 .orElseThrow(jakarta.ws.rs.NotFoundException::new);
     }
@@ -193,8 +247,12 @@ public class StripePaymentEndpoint {
     )
     public SubscriptionStatusResponse createSubscription(
             @PathParam("customerId") String customerId,
-            CreateSubscriptionRequest request) {
-        return stripeService.createSubscription(customerId, request);
+            CreateSubscriptionRequest request,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.createSubscription(customerId, request, mode)
+                : stripeService.createSubscription(customerId, request);
     }
 
     @GET
@@ -208,8 +266,12 @@ public class StripePaymentEndpoint {
     public List<InvoiceSummary> listInvoices(
             @PathParam("customerId") String customerId,
             @QueryParam("limit") @DefaultValue("10") int limit,
-            @QueryParam("startingAfter") String startingAfter) {
-        return stripeService.listInvoices(customerId, limit, startingAfter);
+            @QueryParam("startingAfter") String startingAfter,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.listInvoices(customerId, limit, startingAfter, mode)
+                : stripeService.listInvoices(customerId, limit, startingAfter);
     }
 
     @POST
@@ -223,8 +285,13 @@ public class StripePaymentEndpoint {
                     "Supply an idempotencyKey to safely retry without creating a duplicate session.",
             security = {@SecurityRequirement(name = SESSION_SECRET)}
     )
-    public CreateCheckoutSessionResponse createCheckoutSession(CreateCheckoutSessionRequest request) {
-        return stripeService.createCheckoutSession(request);
+    public CreateCheckoutSessionResponse createCheckoutSession(
+            CreateCheckoutSessionRequest request,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.createCheckoutSession(request, mode)
+                : stripeService.createCheckoutSession(request);
     }
 
     @POST
@@ -236,12 +303,24 @@ public class StripePaymentEndpoint {
                     "Stripe event identifier and the HTTP idempotency key, so retries are safe and will never double-charge.",
             security = {@SecurityRequirement(name = SESSION_SECRET)}
     )
-    public Response recordMeterEvent(RecordMeterEventRequest request) {
-        stripeService.recordMeterEvent(
-                request.customerId(),
-                request.eventName(),
-                request.value(),
-                request.idempotencyKey());
+    public Response recordMeterEvent(
+            RecordMeterEventRequest request,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        if (mode != null) {
+            stripeService.recordMeterEvent(
+                    request.customerId(),
+                    request.eventName(),
+                    request.value(),
+                    request.idempotencyKey(),
+                    mode);
+        } else {
+            stripeService.recordMeterEvent(
+                    request.customerId(),
+                    request.eventName(),
+                    request.value(),
+                    request.idempotencyKey());
+        }
         return Response.noContent().build();
     }
 
@@ -257,8 +336,23 @@ public class StripePaymentEndpoint {
             @PathParam("customerId") String customerId,
             @QueryParam("status") String status,
             @QueryParam("limit") @DefaultValue("10") int limit,
-            @QueryParam("startingAfter") String startingAfter) {
-        return stripeService.listSubscriptionsByCustomer(customerId, status, limit, startingAfter);
+            @QueryParam("startingAfter") String startingAfter,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.listSubscriptionsByCustomer(customerId, status, limit, startingAfter, mode)
+                : stripeService.listSubscriptionsByCustomer(customerId, status, limit, startingAfter);
+    }
+
+    static StripeMode parseMode(String header) {
+        if (header == null || header.isBlank()) {
+            return null;
+        }
+        try {
+            return StripeMode.valueOf(header.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("Invalid " + MODE_HEADER + " header: " + header);
+        }
     }
 
 }
