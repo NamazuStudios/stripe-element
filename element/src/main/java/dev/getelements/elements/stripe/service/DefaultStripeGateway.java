@@ -49,18 +49,8 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
-    public Customer createCustomer(CustomerCreateParams params) throws StripeException {
-        return createCustomer(params, configService.resolveDefaultMode());
-    }
-
-    @Override
     public Customer createCustomer(CustomerCreateParams params, StripeMode mode) throws StripeException {
         return Customer.create(params, options(mode));
-    }
-
-    @Override
-    public Customer updateCustomer(String customerId, CustomerUpdateParams params) throws StripeException {
-        return updateCustomer(customerId, params, configService.resolveDefaultMode());
     }
 
     @Override
@@ -69,18 +59,8 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
-    public SetupIntent createSetupIntent(SetupIntentCreateParams params) throws StripeException {
-        return createSetupIntent(params, configService.resolveDefaultMode());
-    }
-
-    @Override
     public SetupIntent createSetupIntent(SetupIntentCreateParams params, StripeMode mode) throws StripeException {
         return SetupIntent.create(params, options(mode));
-    }
-
-    @Override
-    public PaymentMethodCollection listPaymentMethods(String customerId, CustomerListPaymentMethodsParams params) throws StripeException {
-        return listPaymentMethods(customerId, params, configService.resolveDefaultMode());
     }
 
     @Override
@@ -89,18 +69,8 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
-    public PaymentIntent createPaymentIntent(PaymentIntentCreateParams params, String idempotencyKey) throws StripeException {
-        return createPaymentIntent(params, idempotencyKey, configService.resolveDefaultMode());
-    }
-
-    @Override
     public PaymentIntent createPaymentIntent(PaymentIntentCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
         return PaymentIntent.create(params, options(mode, idempotencyKey));
-    }
-
-    @Override
-    public Subscription retrieveSubscription(String subscriptionId) throws StripeException {
-        return retrieveSubscription(subscriptionId, configService.resolveDefaultMode());
     }
 
     @Override
@@ -109,18 +79,8 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
-    public SubscriptionCollection listSubscriptions(SubscriptionListParams params) throws StripeException {
-        return listSubscriptions(params, configService.resolveDefaultMode());
-    }
-
-    @Override
     public SubscriptionCollection listSubscriptions(SubscriptionListParams params, StripeMode mode) throws StripeException {
         return Subscription.list(params, options(mode));
-    }
-
-    @Override
-    public Subscription createSubscription(SubscriptionCreateParams params, String idempotencyKey) throws StripeException {
-        return createSubscription(params, idempotencyKey, configService.resolveDefaultMode());
     }
 
     @Override
@@ -129,18 +89,8 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
-    public Subscription cancelSubscription(String subscriptionId) throws StripeException {
-        return cancelSubscription(subscriptionId, configService.resolveDefaultMode());
-    }
-
-    @Override
     public Subscription cancelSubscription(String subscriptionId, StripeMode mode) throws StripeException {
         return Subscription.retrieve(subscriptionId, options(mode)).cancel((SubscriptionCancelParams) null, options(mode));
-    }
-
-    @Override
-    public Session createBillingPortalSession(SessionCreateParams params) throws StripeException {
-        return createBillingPortalSession(params, configService.resolveDefaultMode());
     }
 
     @Override
@@ -149,18 +99,8 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
-    public MeterEvent createMeterEvent(MeterEventCreateParams params, String idempotencyKey) throws StripeException {
-        return createMeterEvent(params, idempotencyKey, configService.resolveDefaultMode());
-    }
-
-    @Override
     public MeterEvent createMeterEvent(MeterEventCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
         return MeterEvent.create(params, options(mode, idempotencyKey));
-    }
-
-    @Override
-    public ProductCollection listProducts(ProductListParams params) throws StripeException {
-        return listProducts(params, configService.resolveDefaultMode());
     }
 
     @Override
@@ -169,28 +109,13 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
-    public PriceCollection listPrices(PriceListParams params) throws StripeException {
-        return listPrices(params, configService.resolveDefaultMode());
-    }
-
-    @Override
     public PriceCollection listPrices(PriceListParams params, StripeMode mode) throws StripeException {
         return Price.list(params, options(mode));
     }
 
     @Override
-    public Price retrievePrice(String priceId) throws StripeException {
-        return retrievePrice(priceId, configService.resolveDefaultMode());
-    }
-
-    @Override
     public Price retrievePrice(String priceId, StripeMode mode) throws StripeException {
         return Price.retrieve(priceId, options(mode));
-    }
-
-    @Override
-    public Product retrieveProduct(String productId) throws StripeException {
-        return retrieveProduct(productId, configService.resolveDefaultMode());
     }
 
     @Override
@@ -202,18 +127,8 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
-    public MeterCollection listMeters(MeterListParams params) throws StripeException {
-        return listMeters(params, configService.resolveDefaultMode());
-    }
-
-    @Override
     public MeterCollection listMeters(MeterListParams params, StripeMode mode) throws StripeException {
         return Meter.list(params, options(mode));
-    }
-
-    @Override
-    public CustomerSearchResult searchCustomers(CustomerSearchParams params) throws StripeException {
-        return searchCustomers(params, configService.resolveDefaultMode());
     }
 
     @Override
@@ -222,20 +137,8 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
-    public InvoiceCollection listInvoices(InvoiceListParams params) throws StripeException {
-        return listInvoices(params, configService.resolveDefaultMode());
-    }
-
-    @Override
     public InvoiceCollection listInvoices(InvoiceListParams params, StripeMode mode) throws StripeException {
         return Invoice.list(params, options(mode));
-    }
-
-    @Override
-    public com.stripe.model.checkout.Session createCheckoutSession(
-            com.stripe.param.checkout.SessionCreateParams params,
-            String idempotencyKey) throws StripeException {
-        return createCheckoutSession(params, idempotencyKey, configService.resolveDefaultMode());
     }
 
     @Override

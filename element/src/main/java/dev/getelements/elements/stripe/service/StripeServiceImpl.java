@@ -81,8 +81,8 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public CreateCustomerResponse createCustomer(String email, String name, String orgId) {
-        return createCustomer(email, name, orgId, configService.resolveDefaultMode());
+    public StripeMode defaultMode() {
+        return configService.resolveDefaultMode();
     }
 
     @Override
@@ -104,11 +104,6 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public void updateCustomer(String customerId, String email, String name) {
-        updateCustomer(customerId, email, name, configService.resolveDefaultMode());
-    }
-
-    @Override
     public void updateCustomer(String customerId, String email, String name, StripeMode mode) {
 
         try {
@@ -121,11 +116,6 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw stripeError(e);
         }
-    }
-
-    @Override
-    public CreateSetupIntentResponse createSetupIntent(String customerId) {
-        return createSetupIntent(customerId, configService.resolveDefaultMode());
     }
 
     @Override
@@ -144,11 +134,6 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
         }
-    }
-
-    @Override
-    public List<PaymentMethodSummary> listPaymentMethods(String customerId) {
-        return listPaymentMethods(customerId, configService.resolveDefaultMode());
     }
 
     @Override
@@ -175,11 +160,6 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public boolean hasPaymentMethod(String customerId) {
-        return hasPaymentMethod(customerId, configService.resolveDefaultMode());
-    }
-
-    @Override
     public boolean hasPaymentMethod(String customerId, StripeMode mode) {
 
         try {
@@ -190,11 +170,6 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
         }
-    }
-
-    @Override
-    public CreatePaymentIntentResponse createPaymentIntent(final CreatePaymentIntentRequest request) {
-        return createPaymentIntent(request, configService.resolveDefaultMode());
     }
 
     @Override
@@ -238,11 +213,6 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public SubscriptionStatusResponse getSubscriptionStatus(String subscriptionId) {
-        return getSubscriptionStatus(subscriptionId, configService.resolveDefaultMode());
-    }
-
-    @Override
     public SubscriptionStatusResponse getSubscriptionStatus(String subscriptionId, StripeMode mode) {
 
         try {
@@ -253,11 +223,6 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw new InternalServerErrorException("Stripe error: " + e.getMessage(), e);
         }
-    }
-
-    @Override
-    public SubscriptionListResponse listSubscriptionsByCustomer(String customerId, String status, int limit, String startingAfter) {
-        return listSubscriptionsByCustomer(customerId, status, limit, startingAfter, configService.resolveDefaultMode());
     }
 
     @Override
@@ -292,11 +257,6 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public String createBillingPortalSession(String customerId, String returnUrl) {
-        return createBillingPortalSession(customerId, returnUrl, configService.resolveDefaultMode());
-    }
-
-    @Override
     public String createBillingPortalSession(String customerId, String returnUrl, StripeMode mode) {
 
         try {
@@ -312,11 +272,6 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw stripeError(e);
         }
-    }
-
-    @Override
-    public SubscriptionStatusResponse createSubscription(String customerId, CreateSubscriptionRequest request) {
-        return createSubscription(customerId, request, configService.resolveDefaultMode());
     }
 
     @Override
@@ -346,22 +301,12 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public SubscriptionStatusResponse cancelSubscription(String subscriptionId) {
-        return cancelSubscription(subscriptionId, configService.resolveDefaultMode());
-    }
-
-    @Override
     public SubscriptionStatusResponse cancelSubscription(String subscriptionId, StripeMode mode) {
         try {
             return toStatusResponse(gateway.cancelSubscription(subscriptionId, mode));
         } catch (StripeException e) {
             throw stripeError(e);
         }
-    }
-
-    @Override
-    public List<ProductSummary> listProducts(boolean activeOnly, int limit) {
-        return listProducts(activeOnly, limit, configService.resolveDefaultMode());
     }
 
     @Override
@@ -385,11 +330,6 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public Optional<ProductSummary> getProduct(String productId) {
-        return getProduct(productId, configService.resolveDefaultMode());
-    }
-
-    @Override
     public Optional<ProductSummary> getProduct(String productId, StripeMode mode) {
 
         try {
@@ -402,11 +342,6 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw stripeError(e);
         }
-    }
-
-    @Override
-    public List<PriceSummary> listPrices(String productId, boolean activeOnly, int limit) {
-        return listPrices(productId, activeOnly, limit, configService.resolveDefaultMode());
     }
 
     @Override
@@ -442,11 +377,6 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public PriceSummary retrievePrice(String priceId) {
-        return retrievePrice(priceId, configService.resolveDefaultMode());
-    }
-
-    @Override
     public PriceSummary retrievePrice(String priceId, StripeMode mode) {
 
         try {
@@ -457,32 +387,12 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public List<MeterSummary> listMeters(boolean activeOnly, int limit) {
-        return listMeters(activeOnly, limit, configService.resolveDefaultMode());
-    }
-
-    @Override
     public List<MeterSummary> listMeters(boolean activeOnly, int limit, StripeMode mode) {
         try {
             return joinMetersToPrices(activeOnly, limit, mode);
         } catch (StripeException e) {
             throw stripeError(e);
         }
-    }
-
-    @Override
-    public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName) {
-        return resolvePriceForMeterEventName(eventName, (String) null);
-    }
-
-    @Override
-    public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, StripeMode mode) {
-        return resolvePriceForMeterEventName(eventName, null, mode);
-    }
-
-    @Override
-    public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId) {
-        return resolvePriceForMeterEventName(eventName, subscriptionId, configService.resolveDefaultMode());
     }
 
     @Override
@@ -583,11 +493,6 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue) {
-        return findCustomerByMetadata(metadataKey, metadataValue, configService.resolveDefaultMode());
-    }
-
-    @Override
     public Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue, StripeMode mode) {
 
         try {
@@ -605,11 +510,6 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw stripeError(e);
         }
-    }
-
-    @Override
-    public CreateCheckoutSessionResponse createCheckoutSession(CreateCheckoutSessionRequest request) {
-        return createCheckoutSession(request, configService.resolveDefaultMode());
     }
 
     @Override
@@ -653,11 +553,6 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public List<InvoiceSummary> listInvoices(String customerId, int limit, String startingAfter) {
-        return listInvoices(customerId, limit, startingAfter, configService.resolveDefaultMode());
-    }
-
-    @Override
     public List<InvoiceSummary> listInvoices(String customerId, int limit, String startingAfter, StripeMode mode) {
 
         try {
@@ -683,11 +578,6 @@ public class StripeServiceImpl implements StripeService {
         } catch (StripeException e) {
             throw stripeError(e);
         }
-    }
-
-    @Override
-    public void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey) {
-        recordMeterEvent(customerId, eventName, value, idempotencyKey, configService.resolveDefaultMode());
     }
 
     @Override

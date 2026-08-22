@@ -46,47 +46,27 @@ import dev.getelements.elements.stripe.service.StripeGateway;
 class LiveStripeGateway implements StripeGateway {
 
     @Override
-    public Customer createCustomer(CustomerCreateParams params) throws StripeException {
+    public Customer createCustomer(CustomerCreateParams params, StripeMode mode) throws StripeException {
         return Customer.create(params);
     }
 
     @Override
-    public Customer createCustomer(CustomerCreateParams params, StripeMode mode) throws StripeException {
-        return createCustomer(params);
-    }
-
-    @Override
-    public Customer updateCustomer(String customerId, CustomerUpdateParams params) throws StripeException {
+    public Customer updateCustomer(String customerId, CustomerUpdateParams params, StripeMode mode) throws StripeException {
         return Customer.retrieve(customerId).update(params);
     }
 
     @Override
-    public Customer updateCustomer(String customerId, CustomerUpdateParams params, StripeMode mode) throws StripeException {
-        return updateCustomer(customerId, params);
-    }
-
-    @Override
-    public SetupIntent createSetupIntent(SetupIntentCreateParams params) throws StripeException {
+    public SetupIntent createSetupIntent(SetupIntentCreateParams params, StripeMode mode) throws StripeException {
         return SetupIntent.create(params);
     }
 
     @Override
-    public SetupIntent createSetupIntent(SetupIntentCreateParams params, StripeMode mode) throws StripeException {
-        return createSetupIntent(params);
-    }
-
-    @Override
-    public PaymentMethodCollection listPaymentMethods(String customerId, CustomerListPaymentMethodsParams params) throws StripeException {
+    public PaymentMethodCollection listPaymentMethods(String customerId, CustomerListPaymentMethodsParams params, StripeMode mode) throws StripeException {
         return Customer.retrieve(customerId).listPaymentMethods(params);
     }
 
     @Override
-    public PaymentMethodCollection listPaymentMethods(String customerId, CustomerListPaymentMethodsParams params, StripeMode mode) throws StripeException {
-        return listPaymentMethods(customerId, params);
-    }
-
-    @Override
-    public PaymentIntent createPaymentIntent(PaymentIntentCreateParams params, String idempotencyKey) throws StripeException {
+    public PaymentIntent createPaymentIntent(PaymentIntentCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             return PaymentIntent.create(params, RequestOptions.builder().setIdempotencyKey(idempotencyKey).build());
         }
@@ -94,32 +74,17 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
-    public PaymentIntent createPaymentIntent(PaymentIntentCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
-        return createPaymentIntent(params, idempotencyKey);
-    }
-
-    @Override
-    public Subscription retrieveSubscription(String subscriptionId) throws StripeException {
+    public Subscription retrieveSubscription(String subscriptionId, StripeMode mode) throws StripeException {
         return Subscription.retrieve(subscriptionId);
     }
 
     @Override
-    public Subscription retrieveSubscription(String subscriptionId, StripeMode mode) throws StripeException {
-        return retrieveSubscription(subscriptionId);
-    }
-
-    @Override
-    public SubscriptionCollection listSubscriptions(SubscriptionListParams params) throws StripeException {
+    public SubscriptionCollection listSubscriptions(SubscriptionListParams params, StripeMode mode) throws StripeException {
         return Subscription.list(params);
     }
 
     @Override
-    public SubscriptionCollection listSubscriptions(SubscriptionListParams params, StripeMode mode) throws StripeException {
-        return listSubscriptions(params);
-    }
-
-    @Override
-    public Subscription createSubscription(SubscriptionCreateParams params, String idempotencyKey) throws StripeException {
+    public Subscription createSubscription(SubscriptionCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             return Subscription.create(params, RequestOptions.builder().setIdempotencyKey(idempotencyKey).build());
         }
@@ -127,63 +92,33 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
-    public Subscription createSubscription(SubscriptionCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
-        return createSubscription(params, idempotencyKey);
-    }
-
-    @Override
-    public Subscription cancelSubscription(String subscriptionId) throws StripeException {
+    public Subscription cancelSubscription(String subscriptionId, StripeMode mode) throws StripeException {
         return Subscription.retrieve(subscriptionId).cancel((SubscriptionCancelParams) null);
     }
 
     @Override
-    public Subscription cancelSubscription(String subscriptionId, StripeMode mode) throws StripeException {
-        return cancelSubscription(subscriptionId);
-    }
-
-    @Override
-    public Session createBillingPortalSession(SessionCreateParams params) throws StripeException {
+    public Session createBillingPortalSession(SessionCreateParams params, StripeMode mode) throws StripeException {
         return Session.create(params);
     }
 
     @Override
-    public Session createBillingPortalSession(SessionCreateParams params, StripeMode mode) throws StripeException {
-        return createBillingPortalSession(params);
-    }
-
-    @Override
-    public MeterEvent createMeterEvent(MeterEventCreateParams params, String idempotencyKey) throws StripeException {
+    public MeterEvent createMeterEvent(MeterEventCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
         final var options = RequestOptions.builder().setIdempotencyKey(idempotencyKey).build();
         return MeterEvent.create(params, options);
     }
 
     @Override
-    public MeterEvent createMeterEvent(MeterEventCreateParams params, String idempotencyKey, StripeMode mode) throws StripeException {
-        return createMeterEvent(params, idempotencyKey);
-    }
-
-    @Override
-    public ProductCollection listProducts(ProductListParams params) throws StripeException {
+    public ProductCollection listProducts(ProductListParams params, StripeMode mode) throws StripeException {
         return Product.list(params);
     }
 
     @Override
-    public ProductCollection listProducts(ProductListParams params, StripeMode mode) throws StripeException {
-        return listProducts(params);
-    }
-
-    @Override
-    public PriceCollection listPrices(PriceListParams params) throws StripeException {
+    public PriceCollection listPrices(PriceListParams params, StripeMode mode) throws StripeException {
         return Price.list(params);
     }
 
     @Override
-    public PriceCollection listPrices(PriceListParams params, StripeMode mode) throws StripeException {
-        return listPrices(params);
-    }
-
-    @Override
-    public Product retrieveProduct(String productId) throws StripeException {
+    public Product retrieveProduct(String productId, StripeMode mode) throws StripeException {
         final var params = ProductRetrieveParams.builder()
                 .addExpand("default_price")
                 .build();
@@ -191,59 +126,23 @@ class LiveStripeGateway implements StripeGateway {
     }
 
     @Override
-    public Product retrieveProduct(String productId, StripeMode mode) throws StripeException {
-        return retrieveProduct(productId);
-    }
-
-    @Override
-    public Price retrievePrice(String priceId) throws StripeException {
+    public Price retrievePrice(String priceId, StripeMode mode) throws StripeException {
         return Price.retrieve(priceId);
     }
 
     @Override
-    public Price retrievePrice(String priceId, StripeMode mode) throws StripeException {
-        return retrievePrice(priceId);
-    }
-
-    @Override
-    public MeterCollection listMeters(MeterListParams params) throws StripeException {
+    public MeterCollection listMeters(MeterListParams params, StripeMode mode) throws StripeException {
         return Meter.list(params);
     }
 
     @Override
-    public MeterCollection listMeters(MeterListParams params, StripeMode mode) throws StripeException {
-        return listMeters(params);
-    }
-
-    @Override
-    public CustomerSearchResult searchCustomers(CustomerSearchParams params) throws StripeException {
+    public CustomerSearchResult searchCustomers(CustomerSearchParams params, StripeMode mode) throws StripeException {
         return Customer.search(params);
     }
 
     @Override
-    public CustomerSearchResult searchCustomers(CustomerSearchParams params, StripeMode mode) throws StripeException {
-        return searchCustomers(params);
-    }
-
-    @Override
-    public InvoiceCollection listInvoices(InvoiceListParams params) throws StripeException {
-        return Invoice.list(params);
-    }
-
-    @Override
     public InvoiceCollection listInvoices(InvoiceListParams params, StripeMode mode) throws StripeException {
-        return listInvoices(params);
-    }
-
-    @Override
-    public com.stripe.model.checkout.Session createCheckoutSession(
-            com.stripe.param.checkout.SessionCreateParams params,
-            String idempotencyKey) throws StripeException {
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            return com.stripe.model.checkout.Session.create(
-                    params, RequestOptions.builder().setIdempotencyKey(idempotencyKey).build());
-        }
-        return com.stripe.model.checkout.Session.create(params);
+        return Invoice.list(params);
     }
 
     @Override
@@ -251,7 +150,11 @@ class LiveStripeGateway implements StripeGateway {
             com.stripe.param.checkout.SessionCreateParams params,
             String idempotencyKey,
             StripeMode mode) throws StripeException {
-        return createCheckoutSession(params, idempotencyKey);
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            return com.stripe.model.checkout.Session.create(
+                    params, RequestOptions.builder().setIdempotencyKey(idempotencyKey).build());
+        }
+        return com.stripe.model.checkout.Session.create(params);
     }
 
 }
