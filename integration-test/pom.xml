@@ -8,11 +8,11 @@
     <parent>
         <groupId>dev.getelements.elements.stripe</groupId>
         <artifactId>stripe</artifactId>
-        <version>1.0.4-SNAPSHOT</version>
+        <version>1.0.4</version>
     </parent>
 
     <artifactId>integration-test</artifactId>
-    <version>1.0.4-SNAPSHOT</version>
+    <version>1.0.4</version>
     <name>Stripe Element Integration Tests</name>
     <url>https://github.com/NamazuStudios/stripe-element</url>
 
