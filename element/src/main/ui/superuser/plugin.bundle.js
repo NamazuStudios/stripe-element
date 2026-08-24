@@ -14,14 +14,17 @@
   }
   const CONFIG_URL = "/element/stripe/api/stripe/config";
   const EMPTY_CONFIG = { apiKey: "", webhookSecret: "" };
+  const MODE_TABS = [
+    { id: "production", label: "Production" },
+    { id: "sandbox", label: "Sandbox" }
+  ];
   function ConfigFields({
-    title,
     description,
     apiKeyPlaceholder,
     config,
     onChange
   }) {
-    return /* @__PURE__ */ React.createElement("fieldset", { className: "space-y-5" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("legend", { className: "text-lg font-semibold" }, title), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, description)), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "API Key"), /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("fieldset", { className: "space-y-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, description), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "API Key"), /* @__PURE__ */ React.createElement(
       "input",
       {
         type: "password",
@@ -42,6 +45,7 @@
     ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, "Found in the Stripe Dashboard under Developers → Webhooks. Must use the Account (not v2) webhook type.")));
   }
   function StripeConfigPlugin() {
+    const [activeMode, setActiveMode] = React.useState("production");
     const [production, setProduction] = React.useState(EMPTY_CONFIG);
     const [sandbox, setSandbox] = React.useState(EMPTY_CONFIG);
     const [loading, setLoading] = React.useState(true);
@@ -87,10 +91,18 @@
     if (loading) {
       return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "Loading configuration…"));
     }
-    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and override the Element’s default attributes. Values are masked on load. Both sets of credentials can be configured at once and selected per request via the ", /* @__PURE__ */ React.createElement("code", null, "X-Stripe-Mode"), " header; requests that omit the header use production if configured, sandbox otherwise."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-8" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and override the Element’s default attributes. Values are masked on load. Both sets of credentials can be configured at once and selected per request via the ", /* @__PURE__ */ React.createElement("code", null, "X-Stripe-Mode: (production/sandbox)"), " ", "header; requests that omit the header use production if configured, sandbox otherwise."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-6" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-border" }, /* @__PURE__ */ React.createElement("nav", { className: "flex gap-1", "aria-label": "Stripe mode tabs" }, MODE_TABS.map((tab) => /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        key: tab.id,
+        type: "button",
+        onClick: () => setActiveMode(tab.id),
+        className: `px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeMode === tab.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`
+      },
+      tab.label
+    )))), activeMode === "production" && /* @__PURE__ */ React.createElement(
       ConfigFields,
       {
-        title: "Production",
         description: "Live-mode credentials used by default.",
         apiKeyPlaceholder: "sk_live_…",
         config: production,
@@ -99,10 +111,9 @@
           setSaved(false);
         }
       }
-    ), /* @__PURE__ */ React.createElement(
+    ), activeMode === "sandbox" && /* @__PURE__ */ React.createElement(
       ConfigFields,
       {
-        title: "Sandbox",
         description: "Test-mode credentials, selected via X-Stripe-Mode: sandbox.",
         apiKeyPlaceholder: "sk_test_…",
         config: sandbox,
