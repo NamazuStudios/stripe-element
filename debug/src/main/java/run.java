@@ -39,7 +39,7 @@ public class run {
                 .withDeployment(b -> b
                         .useDefaultRepositories(true)
                         .elementPackage()
-                        .elmArtifact("dev.getelements.elements.stripe:element:elm:1.0-SNAPSHOT")
+                        .elmArtifact("dev.getelements.elements.stripe:element:elm:1.0.4-SNAPSHOT")
                         .endElementPackage()
                         .build()
                 )
