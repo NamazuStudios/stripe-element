@@ -19,6 +19,10 @@ public class StripeConfigDocument {
 
     private String webhookSecret;
 
+    private String sandboxApiKey;
+
+    private String sandboxWebhookSecret;
+
     public String getId() {
         return id;
     }
@@ -37,6 +41,22 @@ public class StripeConfigDocument {
 
     public void setWebhookSecret(String webhookSecret) {
         this.webhookSecret = webhookSecret;
+    }
+
+    public String getSandboxApiKey() {
+        return sandboxApiKey;
+    }
+
+    public void setSandboxApiKey(String sandboxApiKey) {
+        this.sandboxApiKey = sandboxApiKey;
+    }
+
+    public String getSandboxWebhookSecret() {
+        return sandboxWebhookSecret;
+    }
+
+    public void setSandboxWebhookSecret(String sandboxWebhookSecret) {
+        this.sandboxWebhookSecret = sandboxWebhookSecret;
     }
 
 }

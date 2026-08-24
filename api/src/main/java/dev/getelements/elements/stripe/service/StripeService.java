@@ -12,6 +12,7 @@ import dev.getelements.elements.stripe.model.MeterSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
+import dev.getelements.elements.stripe.model.StripeMode;
 import dev.getelements.elements.stripe.model.SubscriptionListResponse;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 
@@ -19,6 +20,14 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Every method that talks to Stripe has a mode-aware overload taking a trailing
+ * {@link StripeMode}, so a caller can pin a request to sandbox (test-mode) or production
+ * (live-mode) regardless of which account this Element's deployment defaults to. The original
+ * no-mode overloads are preserved for backwards compatibility as {@code default} methods that
+ * delegate to the mode-aware overload via {@link #defaultMode()} — implementations only need to
+ * provide the mode-aware methods and {@link #defaultMode()}.
+ */
 public interface StripeService {
 
     /** Metadata key used to associate a Stripe customer/payment with a platform user. */
@@ -26,6 +35,11 @@ public interface StripeService {
 
     /** Metadata key used to associate a Stripe customer/subscription with an org. */
     String METADATA_ORG_ID = "orgId";
+
+    /**
+     * Resolves which mode a no-mode call should use: production if configured, sandbox otherwise.
+     */
+    StripeMode defaultMode();
 
     /**
      * Creates a Stripe Customer and returns its ID. The {@code orgId} is stored in the customer's
@@ -36,7 +50,12 @@ public interface StripeService {
      * @param name   customer display name
      * @param orgId  platform org ID to store in Stripe metadata
      */
-    CreateCustomerResponse createCustomer(String email, String name, String orgId);
+    default CreateCustomerResponse createCustomer(String email, String name, String orgId) {
+        return createCustomer(email, name, orgId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #createCustomer(String, String, String)}. */
+    CreateCustomerResponse createCustomer(String email, String name, String orgId, StripeMode mode);
 
     /**
      * Creates a Stripe SetupIntent for the given customer and returns the client secret.
@@ -46,7 +65,12 @@ public interface StripeService {
      *
      * @param customerId Stripe customer ID
      */
-    CreateSetupIntentResponse createSetupIntent(String customerId);
+    default CreateSetupIntentResponse createSetupIntent(String customerId) {
+        return createSetupIntent(customerId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #createSetupIntent(String)}. */
+    CreateSetupIntentResponse createSetupIntent(String customerId, StripeMode mode);
 
     /**
      * Lists the card payment methods currently attached to a customer. Useful for displaying
@@ -55,7 +79,12 @@ public interface StripeService {
      *
      * @param customerId Stripe customer ID
      */
-    List<PaymentMethodSummary> listPaymentMethods(String customerId);
+    default List<PaymentMethodSummary> listPaymentMethods(String customerId) {
+        return listPaymentMethods(customerId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listPaymentMethods(String)}. */
+    List<PaymentMethodSummary> listPaymentMethods(String customerId, StripeMode mode);
 
     /**
      * Checks whether {@code customerId} has at least one payment method on file, without
@@ -64,7 +93,12 @@ public interface StripeService {
      *
      * @param customerId Stripe customer ID
      */
-    boolean hasPaymentMethod(String customerId);
+    default boolean hasPaymentMethod(String customerId) {
+        return hasPaymentMethod(customerId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #hasPaymentMethod(String)}. */
+    boolean hasPaymentMethod(String customerId, StripeMode mode);
 
     /**
      * Creates a Stripe PaymentIntent for a <strong>one-off purchase</strong> and returns the
@@ -74,7 +108,12 @@ public interface StripeService {
      * @param request charge parameters including amount (in smallest currency unit), currency,
      *                and the Stripe customer ID
      */
-    CreatePaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request);
+    default CreatePaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request) {
+        return createPaymentIntent(request, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #createPaymentIntent(CreatePaymentIntentRequest)}. */
+    CreatePaymentIntentResponse createPaymentIntent(CreatePaymentIntentRequest request, StripeMode mode);
 
     /**
      * Creates a <strong>recurring subscription</strong> for the given customer at the given price.
@@ -85,14 +124,24 @@ public interface StripeService {
      * @param customerId Stripe customer ID
      * @param request    subscription parameters including price, optional metadata, and idempotency key
      */
-    SubscriptionStatusResponse createSubscription(String customerId, CreateSubscriptionRequest request);
+    default SubscriptionStatusResponse createSubscription(String customerId, CreateSubscriptionRequest request) {
+        return createSubscription(customerId, request, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #createSubscription(String, CreateSubscriptionRequest)}. */
+    SubscriptionStatusResponse createSubscription(String customerId, CreateSubscriptionRequest request, StripeMode mode);
 
     /**
      * Retrieves the current status of a single Stripe subscription.
      *
      * @param subscriptionId Stripe subscription ID ({@code sub_...})
      */
-    SubscriptionStatusResponse getSubscriptionStatus(String subscriptionId);
+    default SubscriptionStatusResponse getSubscriptionStatus(String subscriptionId) {
+        return getSubscriptionStatus(subscriptionId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #getSubscriptionStatus(String)}. */
+    SubscriptionStatusResponse getSubscriptionStatus(String subscriptionId, StripeMode mode);
 
     /**
      * Lists subscriptions for the given Stripe customer ID, newest first.
@@ -103,7 +152,12 @@ public interface StripeService {
      * @param limit         maximum results to return (1–100)
      * @param startingAfter subscription ID cursor for the next page; {@code null} for the first page
      */
-    SubscriptionListResponse listSubscriptionsByCustomer(String customerId, String status, int limit, String startingAfter);
+    default SubscriptionListResponse listSubscriptionsByCustomer(String customerId, String status, int limit, String startingAfter) {
+        return listSubscriptionsByCustomer(customerId, status, limit, startingAfter, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listSubscriptionsByCustomer(String, String, int, String)}. */
+    SubscriptionListResponse listSubscriptionsByCustomer(String customerId, String status, int limit, String startingAfter, StripeMode mode);
 
     /**
      * Lists products from the Stripe catalogue.
@@ -111,7 +165,12 @@ public interface StripeService {
      * @param activeOnly if {@code true}, only active (non-archived) products are returned
      * @param limit      maximum number of products to return (1–100)
      */
-    List<ProductSummary> listProducts(boolean activeOnly, int limit);
+    default List<ProductSummary> listProducts(boolean activeOnly, int limit) {
+        return listProducts(activeOnly, limit, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listProducts(boolean, int)}. */
+    List<ProductSummary> listProducts(boolean activeOnly, int limit, StripeMode mode);
 
     /**
      * Retrieves a single Stripe product by its ID, including its default price. Returns
@@ -122,7 +181,12 @@ public interface StripeService {
      *
      * @param productId Stripe product ID ({@code prod_...})
      */
-    Optional<ProductSummary> getProduct(String productId);
+    default Optional<ProductSummary> getProduct(String productId) {
+        return getProduct(productId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #getProduct(String)}. */
+    Optional<ProductSummary> getProduct(String productId, StripeMode mode);
 
     /**
      * Lists prices from the Stripe product catalogue. Results are cached in memory for
@@ -134,7 +198,12 @@ public interface StripeService {
      * @param activeOnly if {@code true}, only active (non-archived) prices are returned
      * @param limit      maximum number of prices to return (1–100)
      */
-    List<PriceSummary> listPrices(String productId, boolean activeOnly, int limit);
+    default List<PriceSummary> listPrices(String productId, boolean activeOnly, int limit) {
+        return listPrices(productId, activeOnly, limit, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listPrices(String, boolean, int)}. */
+    List<PriceSummary> listPrices(String productId, boolean activeOnly, int limit, StripeMode mode);
 
     /**
      * Retrieves a single Stripe price by its ID. Use this to look up current pricing without
@@ -142,7 +211,12 @@ public interface StripeService {
      *
      * @param priceId Stripe price ID ({@code price_...})
      */
-    PriceSummary retrievePrice(String priceId);
+    default PriceSummary retrievePrice(String priceId) {
+        return retrievePrice(priceId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #retrievePrice(String)}. */
+    PriceSummary retrievePrice(String priceId, StripeMode mode);
 
     /**
      * Lists Billing Meters from the Stripe account. A meter's {@link MeterSummary#eventName()} is
@@ -152,7 +226,12 @@ public interface StripeService {
      * @param activeOnly if {@code true}, only active meters are returned
      * @param limit      maximum number of meters to return (1–100)
      */
-    List<MeterSummary> listMeters(boolean activeOnly, int limit);
+    default List<MeterSummary> listMeters(boolean activeOnly, int limit) {
+        return listMeters(activeOnly, limit, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listMeters(boolean, int)}. */
+    List<MeterSummary> listMeters(boolean activeOnly, int limit, StripeMode mode);
 
     /**
      * Resolves the active recurring Price billing usage for the given meter event name — i.e. the
@@ -167,7 +246,14 @@ public interface StripeService {
      *
      * @param eventName the meter event name (as passed to {@link #recordMeterEvent})
      */
-    Optional<PriceSummary> resolvePriceForMeterEventName(String eventName);
+    default Optional<PriceSummary> resolvePriceForMeterEventName(String eventName) {
+        return resolvePriceForMeterEventName(eventName, null, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #resolvePriceForMeterEventName(String)}. */
+    default Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, StripeMode mode) {
+        return resolvePriceForMeterEventName(eventName, null, mode);
+    }
 
     /**
      * Resolves the recurring Price billing usage for the given meter event name, scoped to a
@@ -186,7 +272,12 @@ public interface StripeService {
      * @param subscriptionId Stripe subscription ID ({@code sub_...}) to scope the lookup to, or
      *                        {@code null} to fall back to the catalogue-wide lookup
      */
-    Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId);
+    default Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId) {
+        return resolvePriceForMeterEventName(eventName, subscriptionId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #resolvePriceForMeterEventName(String, String)}. */
+    Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId, StripeMode mode);
 
     /**
      * Searches for a Stripe customer by a metadata key-value pair using the Stripe Customer Search API.
@@ -200,7 +291,12 @@ public interface StripeService {
      * @param metadataValue the value to search for
      * @return the Stripe customer ID, or empty if none found
      */
-    Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue);
+    default Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue) {
+        return findCustomerByMetadata(metadataKey, metadataValue, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #findCustomerByMetadata(String, String)}. */
+    Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue, StripeMode mode);
 
     /**
      * Creates a Stripe-hosted Checkout Session and returns the redirect URL. The customer is sent
@@ -212,7 +308,12 @@ public interface StripeService {
      *
      * @param request checkout parameters including customer, price, redirect URLs, and mode
      */
-    CreateCheckoutSessionResponse createCheckoutSession(CreateCheckoutSessionRequest request);
+    default CreateCheckoutSessionResponse createCheckoutSession(CreateCheckoutSessionRequest request) {
+        return createCheckoutSession(request, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #createCheckoutSession(CreateCheckoutSessionRequest)}. */
+    CreateCheckoutSessionResponse createCheckoutSession(CreateCheckoutSessionRequest request, StripeMode mode);
 
     /**
      * Creates a Stripe Customer Portal session and returns the single-use URL. The customer
@@ -224,7 +325,12 @@ public interface StripeService {
      *                   {@code null} uses the portal's configured default
      * @return single-use portal session URL
      */
-    String createBillingPortalSession(String customerId, String returnUrl);
+    default String createBillingPortalSession(String customerId, String returnUrl) {
+        return createBillingPortalSession(customerId, returnUrl, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #createBillingPortalSession(String, String)}. */
+    String createBillingPortalSession(String customerId, String returnUrl, StripeMode mode);
 
     /**
      * Records a billing meter event for usage-based billing. The {@code idempotencyKey} is
@@ -237,7 +343,12 @@ public interface StripeService {
      * @param idempotencyKey unique key for this event; re-submitting the same key is a no-op
      * @throws NoSuchMeterException if Stripe has no active meter configured for {@code eventName}
      */
-    void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey);
+    default void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey) {
+        recordMeterEvent(customerId, eventName, value, idempotencyKey, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #recordMeterEvent(String, String, BigDecimal, String)}. */
+    void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey, StripeMode mode);
 
     /**
      * Updates a Stripe customer's contact details. Fields that are {@code null} are left unchanged.
@@ -246,7 +357,12 @@ public interface StripeService {
      * @param email      new email address, or {@code null} to leave unchanged
      * @param name       new display name, or {@code null} to leave unchanged
      */
-    void updateCustomer(String customerId, String email, String name);
+    default void updateCustomer(String customerId, String email, String name) {
+        updateCustomer(customerId, email, name, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #updateCustomer(String, String, String)}. */
+    void updateCustomer(String customerId, String email, String name, StripeMode mode);
 
     /**
      * Immediately cancels a Stripe subscription and returns its final status.
@@ -255,7 +371,12 @@ public interface StripeService {
      *
      * @param subscriptionId Stripe subscription ID ({@code sub_...})
      */
-    SubscriptionStatusResponse cancelSubscription(String subscriptionId);
+    default SubscriptionStatusResponse cancelSubscription(String subscriptionId) {
+        return cancelSubscription(subscriptionId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #cancelSubscription(String)}. */
+    SubscriptionStatusResponse cancelSubscription(String subscriptionId, StripeMode mode);
 
     /**
      * Lists invoices for the given Stripe customer, newest first.
@@ -264,12 +385,20 @@ public interface StripeService {
      * @param limit         maximum results to return (1–100)
      * @param startingAfter invoice ID cursor for the next page; {@code null} for the first page
      */
-    List<InvoiceSummary> listInvoices(String customerId, int limit, String startingAfter);
+    default List<InvoiceSummary> listInvoices(String customerId, int limit, String startingAfter) {
+        return listInvoices(customerId, limit, startingAfter, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listInvoices(String, int, String)}. */
+    List<InvoiceSummary> listInvoices(String customerId, int limit, String startingAfter, StripeMode mode);
 
     /**
      * Records a receipt for a confirmed payment in the platform receipt store. Called internally
      * from the webhook handler after Stripe fires {@code payment_intent.succeeded} or
      * {@code invoice.payment_succeeded}. Silently skips if {@code userId} is {@code null} or blank.
+     *
+     * <p>Has no mode-aware overload: this only writes to the platform's own receipt store and
+     * never calls Stripe, so it has no notion of sandbox vs. production.
      *
      * @param transactionId Stripe payment intent or invoice ID
      * @param amount        amount in the smallest currency unit (e.g. cents)

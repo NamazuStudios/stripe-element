@@ -2,6 +2,8 @@ package dev.getelements.elements.stripe.rest;
 
 import dev.getelements.elements.sdk.ElementSupplier;
 import dev.getelements.elements.stripe.model.StripeConfig;
+import dev.getelements.elements.stripe.model.StripeDualConfig;
+import dev.getelements.elements.stripe.model.StripeMode;
 import dev.getelements.elements.stripe.service.StripeConfigService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -29,15 +31,19 @@ public class StripeConfigEndpoint {
         this.configService = el.getServiceLocator().getInstance(StripeConfigService.class);
     }
 
+    /** Package-private — used by unit tests to supply a mock service. */
+    StripeConfigEndpoint(StripeConfigService configService) {
+        this.configService = configService;
+    }
+
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
             summary = "Get Stripe configuration",
-            description = "Returns the current Stripe credentials with values masked for display."
+            description = "Returns the current production and sandbox Stripe credentials, values masked for display."
     )
-    public StripeConfig getConfig() {
-        final var config = configService.getConfig();
-        return new StripeConfig(mask(config.apiKey()), mask(config.webhookSecret()));
+    public StripeDualConfig getConfig() {
+        return new StripeDualConfig(maskedConfig(StripeMode.PRODUCTION), maskedConfig(StripeMode.SANDBOX));
     }
 
     @PUT
@@ -45,11 +51,39 @@ public class StripeConfigEndpoint {
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
             summary = "Save Stripe configuration",
-            description = "Persists Stripe credentials to the database, overriding the Element's default attributes."
+            description = "Persists production and/or sandbox Stripe credentials to the database, overriding the " +
+                    "Element's default attributes. A field whose value still matches the masked placeholder " +
+                    "previously returned by GET is left unchanged; any other value (including empty string, " +
+                    "which clears the field) is persisted as given."
     )
-    public Response saveConfig(StripeConfig config) {
-        configService.saveConfig(config);
+    public Response saveConfig(StripeDualConfig config) {
+
+        if (config.production() != null) {
+            configService.saveConfig(resolveEdits(config.production(), StripeMode.PRODUCTION), StripeMode.PRODUCTION);
+        }
+
+        if (config.sandbox() != null) {
+            configService.saveConfig(resolveEdits(config.sandbox(), StripeMode.SANDBOX), StripeMode.SANDBOX);
+        }
+
         return Response.ok("{\"saved\":true}").build();
+    }
+
+    private StripeConfig maskedConfig(StripeMode mode) {
+        final var config = configService.getConfig(mode);
+        return new StripeConfig(mask(config.apiKey()), mask(config.webhookSecret()));
+    }
+
+    /**
+     * A submitted field equal to the mask of the currently *stored* value (not the
+     * attribute-resolved value returned by {@link StripeConfigService#getConfig}) is treated as
+     * "unchanged" and left alone; any other value, including blank, is a real edit.
+     */
+    private StripeConfig resolveEdits(StripeConfig submitted, StripeMode mode) {
+        final var raw = configService.getRawConfig(mode);
+        final var apiKey = mask(raw.apiKey()).equals(submitted.apiKey()) ? raw.apiKey() : submitted.apiKey();
+        final var secret = mask(raw.webhookSecret()).equals(submitted.webhookSecret()) ? raw.webhookSecret() : submitted.webhookSecret();
+        return new StripeConfig(apiKey, secret);
     }
 
     private static String mask(String value) {
