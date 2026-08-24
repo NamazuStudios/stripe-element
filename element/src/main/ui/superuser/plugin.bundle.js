@@ -5,7 +5,7 @@
     var _a2;
     const token = (_a2 = window.__elementsApiClient) == null ? void 0 : _a2.getSessionToken();
     const headers = { "Content-Type": "application/json", ...extra };
-    if (token) headers["Elements-SessionSecret"] = token;
+    if (token) headers["session_secret"] = token;
     return headers;
   }
   function defaultLimit() {
@@ -13,9 +13,37 @@
     return ((_a2 = window.__elementsSettings) == null ? void 0 : _a2.getResultsPerPage()) ?? 20;
   }
   const CONFIG_URL = "/element/stripe/api/stripe/config";
+  const EMPTY_CONFIG = { apiKey: "", webhookSecret: "" };
+  function ConfigFields({
+    title,
+    description,
+    apiKeyPlaceholder,
+    config,
+    onChange
+  }) {
+    return /* @__PURE__ */ React.createElement("fieldset", { className: "space-y-5" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("legend", { className: "text-lg font-semibold" }, title), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, description)), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "API Key"), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "password",
+        value: config.apiKey,
+        onChange: (e) => onChange({ ...config, apiKey: e.target.value }),
+        placeholder: apiKeyPlaceholder,
+        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      }
+    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, "The Stripe secret key used for PaymentIntent and Subscription API calls.")), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Webhook Signing Secret"), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        type: "password",
+        value: config.webhookSecret,
+        onChange: (e) => onChange({ ...config, webhookSecret: e.target.value }),
+        placeholder: "whsec_…",
+        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      }
+    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, "Found in the Stripe Dashboard under Developers → Webhooks. Must use the Account (not v2) webhook type.")));
+  }
   function StripeConfigPlugin() {
-    const [apiKey, setApiKey] = React.useState("");
-    const [webhookSecret, setWebhookSecret] = React.useState("");
+    const [production, setProduction] = React.useState(EMPTY_CONFIG);
+    const [sandbox, setSandbox] = React.useState(EMPTY_CONFIG);
     const [loading, setLoading] = React.useState(true);
     const [saving, setSaving] = React.useState(false);
     const [saved, setSaved] = React.useState(false);
@@ -26,8 +54,8 @@
           const res = await fetch(CONFIG_URL, { credentials: "include", headers: sessionHeaders() });
           if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
           const data = await res.json();
-          setApiKey(data.apiKey);
-          setWebhookSecret(data.webhookSecret);
+          setProduction(data.production);
+          setSandbox(data.sandbox);
         } catch (e) {
           setError(e instanceof Error ? e.message : String(e));
         } finally {
@@ -46,7 +74,7 @@
           method: "PUT",
           credentials: "include",
           headers: sessionHeaders(),
-          body: JSON.stringify({ apiKey, webhookSecret })
+          body: JSON.stringify({ production, sandbox })
         });
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         setSaved(true);
@@ -59,31 +87,31 @@
     if (loading) {
       return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "Loading configuration…"));
     }
-    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and override the Element’s default attributes. Values are masked on load."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-5" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "API Key"), /* @__PURE__ */ React.createElement(
-      "input",
+    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and override the Element’s default attributes. Values are masked on load. Both sets of credentials can be configured at once and selected per request via the ", /* @__PURE__ */ React.createElement("code", null, "X-Stripe-Mode"), " header; requests that omit the header use production if configured, sandbox otherwise."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-8" }, /* @__PURE__ */ React.createElement(
+      ConfigFields,
       {
-        type: "password",
-        value: apiKey,
-        onChange: (e) => {
-          setApiKey(e.target.value);
+        title: "Production",
+        description: "Live-mode credentials used by default.",
+        apiKeyPlaceholder: "sk_live_…",
+        config: production,
+        onChange: (config) => {
+          setProduction(config);
           setSaved(false);
-        },
-        placeholder: "sk_live_\\u2026 or sk_test_\\u2026",
-        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        }
       }
-    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, "The Stripe secret key used for PaymentIntent and Subscription API calls.")), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Webhook Signing Secret"), /* @__PURE__ */ React.createElement(
-      "input",
+    ), /* @__PURE__ */ React.createElement(
+      ConfigFields,
       {
-        type: "password",
-        value: webhookSecret,
-        onChange: (e) => {
-          setWebhookSecret(e.target.value);
+        title: "Sandbox",
+        description: "Test-mode credentials, selected via X-Stripe-Mode: sandbox.",
+        apiKeyPlaceholder: "sk_test_…",
+        config: sandbox,
+        onChange: (config) => {
+          setSandbox(config);
           setSaved(false);
-        },
-        placeholder: "whsec_\\u2026",
-        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        }
       }
-    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, "Found in the Stripe Dashboard under Developers → Webhooks. Must use the Account (not v2) webhook type.")), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive" }, error), saved && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400" }, "Configuration saved."), /* @__PURE__ */ React.createElement(
+    ), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive" }, error), saved && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400" }, "Configuration saved."), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "submit",
