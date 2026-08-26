@@ -44,7 +44,7 @@ public class DefaultStripeGateway implements StripeGateway {
     private final StripeConfigService configService;
 
     @Inject
-    private DefaultStripeGateway(StripeConfigService configService) {
+    DefaultStripeGateway(StripeConfigService configService) {
         this.configService = configService;
     }
 
