@@ -599,6 +599,19 @@ public class StripeServiceImpl implements StripeService {
                 throw new NoSuchMeterException(eventName, e.getMessage());
             }
             throw stripeError(e);
+        } catch (RuntimeException e) {
+            // stripe-java can throw a raw, message-less ClassCastException here instead of a
+            // StripeException when Stripe's response body isn't shaped as the JSON object its own
+            // error parser expects (see StripeMalformedResponseException for the full mechanism).
+            // Without this catch, that exception propagates with zero context — not even which
+            // event_name failed — making it effectively undiagnosable in logs.
+            throw new StripeMalformedResponseException(
+                    "recordMeterEvent(eventName='" + eventName + "', mode=" + mode + ") received a Stripe " +
+                            "response this stripe-java version could not parse (" + e.getClass().getSimpleName() +
+                            "). This has been observed when Stripe rejects an event_name with no matching " +
+                            "active meter in the target account — verify a meter with this exact event name " +
+                            "exists and is active in Stripe's " + mode + " dashboard.",
+                    e);
         }
     }
 
