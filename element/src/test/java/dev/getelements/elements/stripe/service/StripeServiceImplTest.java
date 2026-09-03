@@ -332,6 +332,32 @@ class StripeServiceImplTest {
         assertEquals("0.25", captor.getValue().getPayload().get("value"));
     }
 
+    @Test
+    void recordMeterEvent_noActiveMeterStripeException_throwsNoSuchMeterException() throws StripeException {
+        final var stripeException = mock(com.stripe.exception.InvalidRequestException.class);
+        when(stripeException.getMessage()).thenReturn("No active meter found for event name \"api_requests\".");
+        doThrow(stripeException).when(gateway).createMeterEvent(any(), any(), any());
+
+        final var thrown = assertThrows(NoSuchMeterException.class, () ->
+                service.recordMeterEvent("cus_test", "api_requests", java.math.BigDecimal.ONE, "idem-key"));
+        assertEquals("api_requests", thrown.getEventName());
+    }
+
+    @Test
+    void recordMeterEvent_gatewayThrowsRawRuntimeException_wrapsAsStripeMalformedResponseException() throws StripeException {
+        // Reproduces stripe-java's own bug: LiveStripeResponseGetter.handleApiError's
+        // Gson.fromJson(body, JsonObject.class).checkcast only has an exception-table entry for
+        // JsonSyntaxException, not ClassCastException — a non-object error body (observed for "no
+        // active meter" responses) escapes as a raw, message-less ClassCastException instead of a
+        // StripeException. StripeServiceImpl must not let that leak uncontextualized.
+        doThrow(new ClassCastException()).when(gateway).createMeterEvent(any(), any(), any());
+
+        final var thrown = assertThrows(StripeMalformedResponseException.class, () ->
+                service.recordMeterEvent("cus_test", "api_requests", java.math.BigDecimal.ONE, "idem-key"));
+        assertInstanceOf(ClassCastException.class, thrown.getCause());
+        assertTrue(thrown.getMessage().contains("api_requests"));
+    }
+
     // --- resolvePriceForMeterEventName ---
 
     @Test
