@@ -270,4 +270,17 @@
 
     </profiles>
 
+        <repositories>
+            <repository>
+                <id>namazu</id>
+                <url>https://maven.namazustudios.com/</url>
+                <releases>
+                    <enabled>true</enabled>
+                </releases>
+                <snapshots>
+                    <enabled>false</enabled>
+                </snapshots>
+            </repository>
+        </repositories>
+
 </project>
