@@ -40,10 +40,12 @@ public class StripeConfigEndpoint {
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
             summary = "Get Stripe configuration",
-            description = "Returns the current production and sandbox Stripe credentials, values masked for display."
+            description = "Returns the current production and sandbox Stripe credentials with plaintext values. " +
+                    "Confidentiality is the client's responsibility: the UI renders these fields as password " +
+                    "inputs (masking and optionally revealing client-side)."
     )
     public StripeDualConfig getConfig() {
-        return new StripeDualConfig(maskedConfig(StripeMode.PRODUCTION), maskedConfig(StripeMode.SANDBOX));
+        return new StripeDualConfig(configService.getConfig(StripeMode.PRODUCTION), configService.getConfig(StripeMode.SANDBOX));
     }
 
     @PUT
@@ -52,44 +54,45 @@ public class StripeConfigEndpoint {
     @Operation(
             summary = "Save Stripe configuration",
             description = "Persists production and/or sandbox Stripe credentials to the database, overriding the " +
-                    "Element's default attributes. A field whose value still matches the masked placeholder " +
-                    "previously returned by GET is left unchanged; any other value (including empty string, " +
-                    "which clears the field) is persisted as given."
+                    "Element's default attributes. Values are persisted as given (including empty string, which " +
+                    "clears the field and restores the attribute default). Submissions containing the UI mask " +
+                    "glyph are rejected so a stale client cannot shadow the real credential."
     )
     public Response saveConfig(StripeDualConfig config) {
 
         if (config.production() != null) {
-            configService.saveConfig(resolveEdits(config.production(), StripeMode.PRODUCTION), StripeMode.PRODUCTION);
+            validateNotMasked(config.production());
         }
 
         if (config.sandbox() != null) {
-            configService.saveConfig(resolveEdits(config.sandbox(), StripeMode.SANDBOX), StripeMode.SANDBOX);
+            validateNotMasked(config.sandbox());
+        }
+
+        // Validation of both sections precedes any persistence so a rejection leaves the
+        // stored configuration untouched (no half-applied submission).
+        if (config.production() != null) {
+            configService.saveConfig(config.production(), StripeMode.PRODUCTION);
+        }
+
+        if (config.sandbox() != null) {
+            configService.saveConfig(config.sandbox(), StripeMode.SANDBOX);
         }
 
         return Response.ok("{\"saved\":true}").build();
     }
 
-    private StripeConfig maskedConfig(StripeMode mode) {
-        final var config = configService.getConfig(mode);
-        return new StripeConfig(mask(config.apiKey()), mask(config.webhookSecret()));
-    }
-
     /**
-     * A submitted field equal to the mask of the currently *stored* value (not the
-     * attribute-resolved value returned by {@link StripeConfigService#getConfig}) is treated as
-     * "unchanged" and left alone; any other value, including blank, is a real edit.
+     * Rejects values still containing the UI mask glyph. The server never issues masks anymore, so a
+     * submission shaped like one can only come from a stale client bundle that round-tripped previously
+     * masked placeholders — persisting one would shadow the real credential (issue #12).
      */
-    private StripeConfig resolveEdits(StripeConfig submitted, StripeMode mode) {
-        final var raw = configService.getRawConfig(mode);
-        final var apiKey = mask(raw.apiKey()).equals(submitted.apiKey()) ? raw.apiKey() : submitted.apiKey();
-        final var secret = mask(raw.webhookSecret()).equals(submitted.webhookSecret()) ? raw.webhookSecret() : submitted.webhookSecret();
-        return new StripeConfig(apiKey, secret);
-    }
-
-    private static String mask(String value) {
-        if (value == null || value.isBlank()) return "";
-        if (value.length() <= 8) return "••••••••";
-        return "••••" + value.substring(value.length() - 4);
+    private void validateNotMasked(StripeConfig config) {
+        if (config.apiKey() != null && config.apiKey().contains("•")) {
+            throw new jakarta.ws.rs.BadRequestException("Masked API keys cannot be saved. Please re-enter the full values.");
+        }
+        if (config.webhookSecret() != null && config.webhookSecret().contains("•")) {
+            throw new jakarta.ws.rs.BadRequestException("Masked webhook secrets cannot be saved. Please re-enter the full values.");
+        }
     }
 
 }

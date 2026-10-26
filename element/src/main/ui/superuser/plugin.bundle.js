@@ -18,31 +18,63 @@
     { id: "production", label: "Production" },
     { id: "sandbox", label: "Sandbox" }
   ];
+  function SecretField({
+    label,
+    hint,
+    placeholder,
+    value,
+    onChange
+  }) {
+    const [revealed, setRevealed] = React.useState(false);
+    const inputId = React.useId();
+    return /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between" }, /* @__PURE__ */ React.createElement("label", { htmlFor: inputId, className: "text-sm font-medium" }, label), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => setRevealed((r) => !r),
+        "aria-pressed": revealed,
+        className: "text-xs text-muted-foreground hover:text-foreground transition-colors"
+      },
+      revealed ? "Hide" : "Show"
+    )), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        id: inputId,
+        type: revealed ? "text" : "password",
+        value,
+        onChange: (e) => onChange(e.target.value),
+        placeholder,
+        autoComplete: "off",
+        spellCheck: false,
+        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      }
+    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, hint));
+  }
   function ConfigFields({
     description,
     apiKeyPlaceholder,
     config,
     onChange
   }) {
-    return /* @__PURE__ */ React.createElement("fieldset", { className: "space-y-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, description), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "API Key"), /* @__PURE__ */ React.createElement(
-      "input",
+    return /* @__PURE__ */ React.createElement("fieldset", { className: "space-y-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, description), /* @__PURE__ */ React.createElement(
+      SecretField,
       {
-        type: "password",
-        value: config.apiKey,
-        onChange: (e) => onChange({ ...config, apiKey: e.target.value }),
+        label: "API Key",
+        hint: "The Stripe secret key used for PaymentIntent and Subscription API calls.",
         placeholder: apiKeyPlaceholder,
-        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        value: config.apiKey,
+        onChange: (apiKey) => onChange({ ...config, apiKey })
       }
-    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, "The Stripe secret key used for PaymentIntent and Subscription API calls.")), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Webhook Signing Secret"), /* @__PURE__ */ React.createElement(
-      "input",
+    ), /* @__PURE__ */ React.createElement(
+      SecretField,
       {
-        type: "password",
-        value: config.webhookSecret,
-        onChange: (e) => onChange({ ...config, webhookSecret: e.target.value }),
+        label: "Webhook Signing Secret",
+        hint: /* @__PURE__ */ React.createElement(React.Fragment, null, "Found in the Stripe Dashboard under Developers → Webhooks. Must use the Account (not v2) webhook type."),
         placeholder: "whsec_…",
-        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        value: config.webhookSecret,
+        onChange: (webhookSecret) => onChange({ ...config, webhookSecret })
       }
-    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, "Found in the Stripe Dashboard under Developers → Webhooks. Must use the Account (not v2) webhook type.")));
+    ));
   }
   function StripeConfigPlugin() {
     const [activeMode, setActiveMode] = React.useState("production");
@@ -91,7 +123,7 @@
     if (loading) {
       return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "Loading configuration…"));
     }
-    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and override the Element’s default attributes. Values are masked on load. Both sets of credentials can be configured at once and selected per request via the ", /* @__PURE__ */ React.createElement("code", null, "X-Stripe-Mode: (production/sandbox)"), " ", "header; requests that omit the header use production if configured, sandbox otherwise."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-6" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-border" }, /* @__PURE__ */ React.createElement("nav", { className: "flex gap-1", "aria-label": "Stripe mode tabs" }, MODE_TABS.map((tab) => /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and override the Element’s default attributes. Values are hidden by default; use Show to reveal them. Both sets of credentials can be configured at once and selected per request via the header:", /* @__PURE__ */ React.createElement("code", null, "X-Stripe-Mode: (production/sandbox)"), " ", "Requests that omit the header use production if configured, sandbox otherwise."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-6" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-border" }, /* @__PURE__ */ React.createElement("nav", { className: "flex gap-1", "aria-label": "Stripe mode tabs" }, MODE_TABS.map((tab) => /* @__PURE__ */ React.createElement(
       "button",
       {
         key: tab.id,
