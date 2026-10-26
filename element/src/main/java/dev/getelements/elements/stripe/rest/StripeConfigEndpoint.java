@@ -59,14 +59,30 @@ public class StripeConfigEndpoint {
     public Response saveConfig(StripeDualConfig config) {
 
         if (config.production() != null) {
+            validateNotMasked(config.production(), StripeMode.PRODUCTION);
             configService.saveConfig(resolveEdits(config.production(), StripeMode.PRODUCTION), StripeMode.PRODUCTION);
         }
 
         if (config.sandbox() != null) {
+            validateNotMasked(config.sandbox(), StripeMode.SANDBOX);
             configService.saveConfig(resolveEdits(config.sandbox(), StripeMode.SANDBOX), StripeMode.SANDBOX);
         }
 
         return Response.ok("{\"saved\":true}").build();
+    }
+
+    private void validateNotMasked(StripeConfig config, StripeMode mode) {
+        final var effective = configService.getConfig(mode);
+        if (containsMaskGlyph(config.apiKey()) && !mask(effective.apiKey()).equals(config.apiKey())) {
+            throw new jakarta.ws.rs.BadRequestException("Masked API keys cannot be saved. Please re-enter the full values.");
+        }
+        if (containsMaskGlyph(config.webhookSecret()) && !mask(effective.webhookSecret()).equals(config.webhookSecret())) {
+            throw new jakarta.ws.rs.BadRequestException("Masked API keys cannot be saved. Please re-enter the full values.");
+        }
+    }
+
+    private static boolean containsMaskGlyph(String value) {
+        return value != null && value.contains("•");
     }
 
     private StripeConfig maskedConfig(StripeMode mode) {
@@ -75,14 +91,17 @@ public class StripeConfigEndpoint {
     }
 
     /**
-     * A submitted field equal to the mask of the currently *stored* value (not the
-     * attribute-resolved value returned by {@link StripeConfigService#getConfig}) is treated as
-     * "unchanged" and left alone; any other value, including blank, is a real edit.
+     * A submitted field equal to the mask of the currently *effective* value (as returned by
+     * {@link StripeConfigService#getConfig}) is treated as "unchanged" and left alone; any other
+     * value, including blank, is a real edit.
      */
     private StripeConfig resolveEdits(StripeConfig submitted, StripeMode mode) {
+        final var effective = configService.getConfig(mode);
         final var raw = configService.getRawConfig(mode);
-        final var apiKey = mask(raw.apiKey()).equals(submitted.apiKey()) ? raw.apiKey() : submitted.apiKey();
-        final var secret = mask(raw.webhookSecret()).equals(submitted.webhookSecret()) ? raw.webhookSecret() : submitted.webhookSecret();
+
+        final var apiKey = mask(effective.apiKey()).equals(submitted.apiKey()) ? raw.apiKey() : submitted.apiKey();
+        final var secret = mask(effective.webhookSecret()).equals(submitted.webhookSecret()) ? raw.webhookSecret() : submitted.webhookSecret();
+
         return new StripeConfig(apiKey, secret);
     }
 
