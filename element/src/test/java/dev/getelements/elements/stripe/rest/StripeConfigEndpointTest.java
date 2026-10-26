@@ -11,10 +11,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * The endpoint no longer masks server-side: GET returns plaintext and UI masking is client-side
+ * (password fields with optional reveal). PUT persists values verbatim, rejecting any submission
+ * still containing the UI mask glyph — a stale pre-migration client could otherwise persist a
+ * masked placeholder literal and shadow the real credential (issue #12).
+ */
 @ExtendWith(MockitoExtension.class)
 class StripeConfigEndpointTest {
 
@@ -27,109 +36,82 @@ class StripeConfigEndpointTest {
         endpoint = new StripeConfigEndpoint(configService);
     }
 
+    // --- GET (plaintext) ---
+
     @Test
-    void getConfig_returnsMaskedProductionAndSandbox() {
-        when(configService.getConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_abcd1234", "whsec_livesecret1234"));
-        when(configService.getConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_wxyz9876", "whsec_testsecret9876"));
+    void getConfig_returnsEffectiveConfigIncludingAttributeFallback() {
+        when(configService.getConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_prodKeyAb", "whsec_prodSecret12"));
+        when(configService.getConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_testKeyCd", "whsec_testSecret34"));
 
         final var result = endpoint.getConfig();
 
-        assertEquals("••••1234", result.production().apiKey());
-        assertEquals("••••1234", result.production().webhookSecret());
-        assertEquals("••••9876", result.sandbox().apiKey());
-        assertEquals("••••9876", result.sandbox().webhookSecret());
+        assertEquals(new StripeConfig("sk_live_prodKeyAb", "whsec_prodSecret12"), result.production());
+        assertEquals(new StripeConfig("sk_test_testKeyCd", "whsec_testSecret34"), result.sandbox());
     }
 
-    @Test
-    void saveConfig_unchangedMaskedField_isNotOverwritten() {
-        when(configService.getConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_abcd1234", "whsec_livesecret1234"));
-        when(configService.getRawConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_abcd1234", "whsec_livesecret1234"));
-
-        // Simulate the UI submitting the field back unedited: it only shows the mask.
-        final var submitted = new StripeDualConfig(new StripeConfig("••••1234", "••••1234"), null);
-        endpoint.saveConfig(submitted);
-
-        verify(configService).saveConfig(new StripeConfig("sk_live_abcd1234", "whsec_livesecret1234"), StripeMode.PRODUCTION);
-        verify(configService, never()).saveConfig(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(StripeMode.SANDBOX));
-    }
+    // --- PUT (verbatim persistence) ---
 
     @Test
-    void saveConfig_realEdit_isPersistedVerbatim() {
-        when(configService.getConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_old", "whsec_test_old"));
-        when(configService.getRawConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_old", "whsec_test_old"));
+    void saveConfig_persistsProductionAndSandboxVerbatim() {
+        final var submitted = new StripeDualConfig(
+                new StripeConfig("sk_live_new", "whsec_new"),
+                new StripeConfig("sk_test_new", "whsec_test_new"));
 
-        final var submitted = new StripeDualConfig(null, new StripeConfig("sk_test_new", "whsec_test_old"));
         endpoint.saveConfig(submitted);
 
-        verify(configService).saveConfig(new StripeConfig("sk_test_new", "whsec_test_old"), StripeMode.SANDBOX);
+        verify(configService).saveConfig(new StripeConfig("sk_live_new", "whsec_new"), StripeMode.PRODUCTION);
+        verify(configService).saveConfig(new StripeConfig("sk_test_new", "whsec_test_new"), StripeMode.SANDBOX);
     }
 
     @Test
     void saveConfig_emptyString_clearsField() {
-        when(configService.getConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_abcd1234", "whsec_livesecret1234"));
-        when(configService.getRawConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_abcd1234", "whsec_livesecret1234"));
+        final var submitted = new StripeDualConfig(new StripeConfig("", "whsec_livesecret1234"), null);
 
-        final var submitted = new StripeDualConfig(new StripeConfig("", "••••1234"), null);
         endpoint.saveConfig(submitted);
 
         verify(configService).saveConfig(new StripeConfig("", "whsec_livesecret1234"), StripeMode.PRODUCTION);
+        verify(configService, never()).saveConfig(any(), eq(StripeMode.SANDBOX));
+    }
+
+    // --- PUT (mask-shape rejection) ---
+
+    @Test
+    void saveConfig_maskGlyphInApiKey_isRejectedWithoutSaving() {
+        final var submitted = new StripeDualConfig(new StripeConfig("••••BLQF", "real_secret"), null);
+
+        assertThrows(jakarta.ws.rs.BadRequestException.class, () -> endpoint.saveConfig(submitted));
+        verify(configService, never()).saveConfig(any(), any());
     }
 
     @Test
-    void saveConfig_attributeConfiguredKeyNotPersistedAsMaskedLiteral() {
-        // Raw DB has no config, but effective config comes from attributes
-        when(configService.getConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_from_attribute", "whsec_attr_secret"));
-        when(configService.getRawConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig(null, null));
+    void saveConfig_maskGlyphInWebhookSecret_isRejectedWithoutSaving() {
+        final var submitted = new StripeDualConfig(new StripeConfig("real_key", "••••5aDK"), null);
 
-        // UI submits masked values back as shown
-        final var submitted = new StripeDualConfig(new StripeConfig("••••bute", "••••cret"), null);
-        endpoint.saveConfig(submitted);
-
-        // Should NOT persist masked literals; should keep raw as-is (null) so attribute remains effective
-        verify(configService).saveConfig(new StripeConfig(null, null), StripeMode.PRODUCTION);
+        assertThrows(jakarta.ws.rs.BadRequestException.class, () -> endpoint.saveConfig(submitted));
+        verify(configService, never()).saveConfig(any(), any());
     }
 
     @Test
-    void saveConfig_updateOnlyProductionLeavesSandboxMaskedUntouched() {
-        when(configService.getConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_prod1234", "whsec_prod1234"));
-        when(configService.getRawConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_prod1234", "whsec_prod1234"));
-        when(configService.getConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_sand1234", "whsec_sand1234"));
-        when(configService.getRawConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_sand1234", "whsec_sand1234"));
-
+    void saveConfig_maskGlyphInSandbox_isRejectedWithoutSavingProduction() {
         final var submitted = new StripeDualConfig(
-                new StripeConfig("sk_live_prod_new", "whsec_prod1234"),
-                new StripeConfig("••••1234", "••••1234")
-        );
-        endpoint.saveConfig(submitted);
+                new StripeConfig("real_key", "real_secret"),
+                new StripeConfig("••••BLQF", ""));
 
-        verify(configService).saveConfig(new StripeConfig("sk_live_prod_new", "whsec_prod1234"), StripeMode.PRODUCTION);
-        verify(configService).saveConfig(new StripeConfig("sk_test_sand1234", "whsec_sand1234"), StripeMode.SANDBOX);
+        assertThrows(jakarta.ws.rs.BadRequestException.class, () -> endpoint.saveConfig(submitted));
+        // Production was validated first and must not have been persisted either; the whole
+        // submission fails atomically.
+        verify(configService, never()).saveConfig(any(), any());
     }
 
-    @Test
-    void saveConfig_literalMaskStringIsRejected() {
-        when(configService.getConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_realkey", "whsec_realsecret"));
-
-        final var submitted = new StripeDualConfig(new StripeConfig("••••FAKE", "••••FAKE"), null);
-        org.junit.jupiter.api.Assertions.assertThrows(jakarta.ws.rs.BadRequestException.class, () -> endpoint.saveConfig(submitted));
-        verify(configService, never()).saveConfig(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
-    }
+    // --- edge cases ---
 
     @Test
-    void saveConfig_bothModesSubmittedWithMixedEdits() {
-        when(configService.getConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_pold", "whsec_pold"));
-        when(configService.getRawConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_pold", "whsec_pold"));
-        when(configService.getConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_sold", "whsec_sold"));
-        when(configService.getRawConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_sold", "whsec_sold"));
+    void saveConfig_nullModeSections_areIgnored() {
+        final var submitted = new StripeDualConfig(null, null);
 
-        final var submitted = new StripeDualConfig(
-                new StripeConfig("sk_live_pnew", "••••pold"),
-                new StripeConfig("••••sold", "whsec_snew")
-        );
         endpoint.saveConfig(submitted);
 
-        verify(configService).saveConfig(new StripeConfig("sk_live_pnew", "whsec_pold"), StripeMode.PRODUCTION);
-        verify(configService).saveConfig(new StripeConfig("sk_test_sold", "whsec_snew"), StripeMode.SANDBOX);
+        verify(configService, never()).saveConfig(any(), any());
     }
 
 }

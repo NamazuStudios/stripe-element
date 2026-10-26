@@ -22,6 +22,49 @@ const MODE_TABS: { id: ModeTab; label: string }[] = [
   { id: 'sandbox', label: 'Sandbox' },
 ]
 
+function SecretField({
+  label,
+  hint,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string
+  hint: React.ReactNode
+  placeholder: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  const [revealed, setRevealed] = React.useState(false)
+  const inputId = React.useId()
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label htmlFor={inputId} className="text-sm font-medium">{label}</label>
+        <button
+          type="button"
+          onClick={() => setRevealed(r => !r)}
+          aria-pressed={revealed}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {revealed ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      <input
+        id={inputId}
+        type={revealed ? 'text' : 'password'}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete="off"
+        spellCheck={false}
+        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </div>
+  )
+}
+
 function ConfigFields({
   description,
   apiKeyPlaceholder,
@@ -37,34 +80,26 @@ function ConfigFields({
     <fieldset className="space-y-5">
       <p className="text-sm text-muted-foreground">{description}</p>
 
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium">API Key</label>
-        <input
-          type="password"
-          value={config.apiKey}
-          onChange={e => onChange({ ...config, apiKey: e.target.value })}
-          placeholder={apiKeyPlaceholder}
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <p className="text-xs text-muted-foreground">
-          The Stripe secret key used for PaymentIntent and Subscription API calls.
-        </p>
-      </div>
+      <SecretField
+        label="API Key"
+        hint="The Stripe secret key used for PaymentIntent and Subscription API calls."
+        placeholder={apiKeyPlaceholder}
+        value={config.apiKey}
+        onChange={apiKey => onChange({ ...config, apiKey })}
+      />
 
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium">Webhook Signing Secret</label>
-        <input
-          type="password"
-          value={config.webhookSecret}
-          onChange={e => onChange({ ...config, webhookSecret: e.target.value })}
-          placeholder="whsec_…"
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <p className="text-xs text-muted-foreground">
-          Found in the Stripe Dashboard under Developers &rarr; Webhooks. Must use the
-          Account (not v2) webhook type.
-        </p>
-      </div>
+      <SecretField
+        label="Webhook Signing Secret"
+        hint={
+          <>
+            Found in the Stripe Dashboard under Developers &rarr; Webhooks. Must use the
+            Account (not v2) webhook type.
+          </>
+        }
+        placeholder="whsec_…"
+        value={config.webhookSecret}
+        onChange={webhookSecret => onChange({ ...config, webhookSecret })}
+      />
     </fieldset>
   )
 }
@@ -129,8 +164,8 @@ export function StripeConfigPlugin() {
       <h1 className="text-2xl font-bold mb-1">Stripe Configuration</h1>
       <p className="text-sm text-muted-foreground mb-6">
         Credentials are stored in the database and override the Element&rsquo;s default
-        attributes. Values are masked on load. Both sets of credentials can be configured at
-        once and selected per request via the header:
+        attributes. Values are hidden by default; use Show to reveal them. Both sets of
+        credentials can be configured at once and selected per request via the header:
         <code>X-Stripe-Mode: (production/sandbox)</code>{' '}
         Requests that omit the header use production if configured, sandbox otherwise.
       </p>

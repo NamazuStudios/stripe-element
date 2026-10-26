@@ -26,8 +26,7 @@ public interface StripeConfigService {
 
     /**
      * Returns the raw, stored-only configuration for the given mode with no attribute-default
-     * fallback applied. Used to distinguish "unset" from "set to the deployment default" when
-     * diffing against masked values submitted back from a client.
+     * fallback applied.
      */
     StripeConfig getRawConfig(StripeMode mode);
 
