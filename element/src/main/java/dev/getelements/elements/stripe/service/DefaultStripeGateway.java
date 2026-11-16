@@ -18,6 +18,8 @@ import com.stripe.model.SubscriptionCollection;
 import com.stripe.model.billing.Meter;
 import com.stripe.model.billing.MeterCollection;
 import com.stripe.model.billing.MeterEvent;
+import com.stripe.model.billing.MeterEventSummary;
+import com.stripe.model.billing.MeterEventSummaryCollection;
 import com.stripe.model.billingportal.Session;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.CustomerCreateParams;
@@ -34,6 +36,7 @@ import com.stripe.param.SubscriptionCancelParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.billing.MeterEventCreateParams;
+import com.stripe.param.billing.MeterEventSummaryListParams;
 import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 import dev.getelements.elements.stripe.model.StripeMode;
@@ -129,6 +132,11 @@ public class DefaultStripeGateway implements StripeGateway {
     @Override
     public MeterCollection listMeters(MeterListParams params, StripeMode mode) throws StripeException {
         return Meter.list(params, options(mode));
+    }
+
+    @Override
+    public MeterEventSummaryCollection listMeterEventSummaries(String meterId, MeterEventSummaryListParams params, StripeMode mode) throws StripeException {
+        return MeterEventSummary.list(meterId, params, options(mode));
     }
 
     @Override

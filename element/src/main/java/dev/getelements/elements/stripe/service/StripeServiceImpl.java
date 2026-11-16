@@ -11,6 +11,7 @@ import com.stripe.param.PriceListParams;
 import com.stripe.param.ProductListParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.billing.MeterEventCreateParams;
+import com.stripe.param.billing.MeterEventSummaryListParams;
 import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.PaymentIntentCreateParams;
@@ -32,6 +33,7 @@ import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.MeterSummary;
+import dev.getelements.elements.stripe.model.MeterUsageSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
@@ -45,6 +47,8 @@ import jakarta.ws.rs.NotFoundException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -56,6 +60,15 @@ public class StripeServiceImpl implements StripeService {
 
     /** Substring of Stripe's literal error text: {@code No active meter found for event name "<name>".} */
     private static final String NO_ACTIVE_METER_MESSAGE = "No active meter found for event name";
+
+    /** Time range used by {@link #listMeterUsage} when the caller supplies no explicit range. */
+    private static final java.time.Duration DEFAULT_USAGE_WINDOW = java.time.Duration.ofHours(24);
+
+    /** Stripe's per-request maximum for event summaries. */
+    private static final long SUMMARIES_PAGE_LIMIT = 100;
+
+    /** Hard cap on paged summaries so an over-wide window can't loop unboundedly. */
+    private static final int SUMMARIES_HARD_CAP = 1000;
 
     private final StripeGateway gateway;
     private final StripeConfigService configService;
@@ -396,6 +409,105 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
+    public List<MeterUsageSummary> listMeterUsage(
+            String eventName,
+            String customerId,
+            Instant startTime,
+            Instant endTime,
+            String window,
+            StripeMode mode) {
+
+        if (eventName == null || eventName.isBlank()) {
+            throw new BadRequestException("eventName is required");
+        }
+
+        if (customerId == null || customerId.isBlank()) {
+            throw new BadRequestException("customerId is required — Stripe's event summaries API only answers per-customer queries");
+        }
+
+        final var windowStrategy = parseWindow(window);
+        final var resolvedEnd = align(endTime != null ? endTime : Instant.now(), windowStrategy);
+        final var resolvedStart = align(startTime != null ? startTime : resolvedEnd.minus(DEFAULT_USAGE_WINDOW), windowStrategy);
+
+        if (!resolvedStart.isBefore(resolvedEnd)) {
+            throw new BadRequestException("startTime must be before endTime");
+        }
+
+        try {
+
+            final var meterId = findMeterIdForEventName(eventName, mode)
+                    .orElseThrow(() -> new NoSuchMeterException(eventName, "No active meter found for event name " + eventName));
+
+            final var summaries = new ArrayList<MeterUsageSummary>();
+            String startingAfter = null;
+
+            // Page through Stripe's summaries (max 100/request) up to a hard cap so an over-wide
+            // window can't loop unboundedly, but a normal hour/day bucketing always completes.
+            do {
+
+                final var builder = MeterEventSummaryListParams.builder()
+                        .setCustomer(customerId)
+                        .setStartTime(resolvedStart.getEpochSecond())
+                        .setEndTime(resolvedEnd.getEpochSecond())
+                        .setLimit(SUMMARIES_PAGE_LIMIT);
+
+                if (windowStrategy != null) {
+                    builder.setValueGroupingWindow(windowStrategy);
+                }
+
+                if (startingAfter != null) {
+                    builder.setStartingAfter(startingAfter);
+                }
+
+                final var page = gateway.listMeterEventSummaries(meterId, builder.build(), mode);
+
+                page.getData().forEach(s -> summaries.add(new MeterUsageSummary(
+                        s.getId(),
+                        s.getMeter(),
+                        eventName,
+                        s.getAggregatedValue(),
+                        s.getStartTime() != null ? Instant.ofEpochSecond(s.getStartTime()).toString() : null,
+                        s.getEndTime() != null ? Instant.ofEpochSecond(s.getEndTime()).toString() : null)));
+
+                startingAfter = Boolean.TRUE.equals(page.getHasMore()) && !page.getData().isEmpty()
+                        ? page.getData().getLast().getId()
+                        : null;
+
+            } while (startingAfter != null && summaries.size() < SUMMARIES_HARD_CAP);
+
+            return summaries;
+
+        } catch (StripeException e) {
+            throw stripeError(e);
+        }
+    }
+
+    private static MeterEventSummaryListParams.ValueGroupingWindow parseWindow(String window) {
+        if (window == null || window.isBlank()) {
+            return null;
+        }
+        // Note: Stripe's API also supports a "day" grouping, but stripe-java 25.3.0's generated
+        // ValueGroupingWindow enum predates it — add DAY there when the SDK is upgraded.
+        return switch (window.trim().toLowerCase()) {
+            case "hour" -> MeterEventSummaryListParams.ValueGroupingWindow.HOUR;
+            default -> throw new BadRequestException("window must be \"hour\" or omitted for a single aggregate");
+        };
+    }
+
+    /**
+     * Aligns an instant down to the boundary Stripe requires for the given grouping window:
+     * minutes for ungrouped queries and whole hours for {@code "hour"}. Flooring the (exclusive)
+     * end can exclude the in-progress bucket — events also land asynchronously — which is the
+     * conservative choice for verification sums.
+     */
+    private static Instant align(Instant instant, MeterEventSummaryListParams.ValueGroupingWindow window) {
+        if (window == MeterEventSummaryListParams.ValueGroupingWindow.HOUR) {
+            return instant.truncatedTo(ChronoUnit.HOURS);
+        }
+        return instant.truncatedTo(ChronoUnit.MINUTES);
+    }
+
+    @Override
     public Optional<PriceSummary> resolvePriceForMeterEventName(String eventName, String subscriptionId, StripeMode mode) {
 
         if (subscriptionId != null && !subscriptionId.isBlank()) {
@@ -595,8 +707,12 @@ public class StripeServiceImpl implements StripeService {
             gateway.createMeterEvent(params, idempotencyKey, mode);
 
         } catch (StripeException e) {
-            if (e.getMessage() != null && e.getMessage().contains(NO_ACTIVE_METER_MESSAGE)) {
-                throw new NoSuchMeterException(eventName, e.getMessage());
+            if (isNoSuchMeterError(e)) {
+                final var error = e.getStripeError();
+                final var message = e.getMessage() != null
+                        ? e.getMessage()
+                        : error != null ? error.getMessage() : null;
+                throw new NoSuchMeterException(eventName, message);
             }
             throw stripeError(e);
         } catch (RuntimeException e) {
@@ -613,6 +729,22 @@ public class StripeServiceImpl implements StripeService {
                             "exists and is active in Stripe's " + mode + " dashboard.",
                     e);
         }
+    }
+
+    /**
+     * Detects Stripe's "no active meter for event name" rejection, preferring the structured
+     * {@link com.stripe.model.StripeError} payload (whose shape is stable across API versions)
+     * over the top-level exception message, whose rendering has drifted between stripe-java
+     * releases. Falls back to the exception message for older error paths that don't populate
+     * the structured object.
+     */
+    private static boolean isNoSuchMeterError(StripeException e) {
+        final var error = e.getStripeError();
+        if (error != null && error.getMessage() != null
+                && error.getMessage().contains(NO_ACTIVE_METER_MESSAGE)) {
+            return true;
+        }
+        return e.getMessage() != null && e.getMessage().contains(NO_ACTIVE_METER_MESSAGE);
     }
 
     /** Maps a Stripe exception to the most appropriate JAX-RS exception. */

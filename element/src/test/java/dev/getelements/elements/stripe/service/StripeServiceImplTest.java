@@ -29,6 +29,7 @@ import dev.getelements.elements.sdk.service.user.UserService;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 import jakarta.inject.Provider;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -845,6 +847,171 @@ class StripeServiceImplTest {
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.updateCustomer("cus_test", "x@x.com", "X"));
+    }
+
+    // --- listMeterUsage ---
+
+    private com.stripe.model.billing.MeterCollection mockMeterCatalogue() throws StripeException {
+        final var meter = mock(com.stripe.model.billing.Meter.class);
+        when(meter.getEventName()).thenReturn("api_requests");
+        when(meter.getId()).thenReturn("mtr_001");
+        final var meterCollection = mock(com.stripe.model.billing.MeterCollection.class);
+        when(meterCollection.getData()).thenReturn(List.of(meter));
+        when(gateway.listMeters(any(), any())).thenReturn(meterCollection);
+        return meterCollection;
+    }
+
+    @Test
+    void listMeterUsage_mapsSummariesCorrectly() throws StripeException {
+        mockMeterCatalogue();
+
+        final var summary = mock(com.stripe.model.billing.MeterEventSummary.class);
+        when(summary.getId()).thenReturn("mtrusg_001");
+        when(summary.getMeter()).thenReturn("mtr_001");
+        when(summary.getAggregatedValue()).thenReturn(new java.math.BigDecimal("42.5"));
+        when(summary.getStartTime()).thenReturn(1700000000L);
+        when(summary.getEndTime()).thenReturn(1700003600L);
+        final var collection = mock(com.stripe.model.billing.MeterEventSummaryCollection.class);
+        when(collection.getData()).thenReturn(List.of(summary));
+        when(collection.getHasMore()).thenReturn(false);
+        when(gateway.listMeterEventSummaries(eq("mtr_001"), any(), any())).thenReturn(collection);
+
+        final var result = service.listMeterUsage("api_requests", "cus_test", null, null, null);
+
+        assertEquals(1, result.size());
+        final var usage = result.getFirst();
+        assertEquals("mtrusg_001", usage.id());
+        assertEquals("mtr_001", usage.meterId());
+        assertEquals("api_requests", usage.eventName());
+        assertEquals(new java.math.BigDecimal("42.5"), usage.aggregatedValue());
+        assertEquals(Instant.ofEpochSecond(1700000000L).toString(), usage.startTime());
+        assertEquals(Instant.ofEpochSecond(1700003600L).toString(), usage.endTime());
+    }
+
+    @Test
+    void listMeterUsage_passesCustomerAndDefaultWindowToGateway() throws StripeException {
+        mockMeterCatalogue();
+
+        final var collection = mock(com.stripe.model.billing.MeterEventSummaryCollection.class);
+        when(collection.getData()).thenReturn(List.of());
+        when(gateway.listMeterEventSummaries(any(), any(), any())).thenReturn(collection);
+
+        service.listMeterUsage("api_requests", "cus_test", null, null, null);
+
+        verify(gateway).listMeterEventSummaries(eq("mtr_001"), argThat(p ->
+                "cus_test".equals(p.getCustomer())
+                        && p.getStartTime() != null && p.getEndTime() != null
+                        && p.getEndTime() - p.getStartTime() <= 24 * 3600
+                        && p.getEndTime() % 60 == 0 && p.getStartTime() % 60 == 0
+                        && p.getValueGroupingWindow() == null
+        ), any());
+    }
+
+    @Test
+    void listMeterUsage_explicitRangeAndHourWindow_passedThroughAligned() throws StripeException {
+        mockMeterCatalogue();
+
+        final var collection = mock(com.stripe.model.billing.MeterEventSummaryCollection.class);
+        when(collection.getData()).thenReturn(List.of());
+        when(gateway.listMeterEventSummaries(any(), any(), any())).thenReturn(collection);
+
+        final var start = Instant.parse("2026-11-15T06:30:00Z");
+        final var end = Instant.parse("2026-11-15T18:45:13Z");
+        service.listMeterUsage("api_requests", "cus_test", start, end, "hour");
+
+        verify(gateway).listMeterEventSummaries(eq("mtr_001"), argThat(p ->
+                p.getStartTime() == start.truncatedTo(java.time.temporal.ChronoUnit.HOURS).getEpochSecond()
+                        && p.getEndTime() == end.truncatedTo(java.time.temporal.ChronoUnit.HOURS).getEpochSecond()
+                        && p.getValueGroupingWindow() == com.stripe.param.billing.MeterEventSummaryListParams.ValueGroupingWindow.HOUR
+        ), any());
+    }
+
+    @Test
+    void listMeterUsage_hasMore_pagesUntilExhausted() throws StripeException {
+        mockMeterCatalogue();
+
+        final var summaryA = mock(com.stripe.model.billing.MeterEventSummary.class);
+        when(summaryA.getId()).thenReturn("mtrusg_a");
+        when(summaryA.getMeter()).thenReturn("mtr_001");
+        when(summaryA.getAggregatedValue()).thenReturn(java.math.BigDecimal.ONE);
+        when(summaryA.getStartTime()).thenReturn(1700000000L);
+        when(summaryA.getEndTime()).thenReturn(1700003600L);
+
+        final var summaryB = mock(com.stripe.model.billing.MeterEventSummary.class);
+        when(summaryB.getId()).thenReturn("mtrusg_b");
+        when(summaryB.getMeter()).thenReturn("mtr_001");
+        when(summaryB.getAggregatedValue()).thenReturn(java.math.BigDecimal.TWO);
+        when(summaryB.getStartTime()).thenReturn(1700003600L);
+        when(summaryB.getEndTime()).thenReturn(1700007200L);
+
+        final var page1 = mock(com.stripe.model.billing.MeterEventSummaryCollection.class);
+        when(page1.getData()).thenReturn(List.of(summaryA));
+        when(page1.getHasMore()).thenReturn(true);
+        final var page2 = mock(com.stripe.model.billing.MeterEventSummaryCollection.class);
+        when(page2.getData()).thenReturn(List.of(summaryB));
+        when(page2.getHasMore()).thenReturn(false);
+
+        when(gateway.listMeterEventSummaries(eq("mtr_001"), any(), any()))
+                .thenReturn(page1)
+                .thenReturn(page2);
+
+        final var result = service.listMeterUsage("api_requests", "cus_test", null, null, "hour");
+
+        assertEquals(2, result.size());
+        verify(gateway, times(2)).listMeterEventSummaries(any(), any(), any());
+    }
+
+    @Test
+    void listMeterUsage_unknownEventName_throwsNoSuchMeterWithoutCallingSummaries() throws StripeException {
+        final var meterCollection = mock(com.stripe.model.billing.MeterCollection.class);
+        when(meterCollection.getData()).thenReturn(List.of());
+        when(gateway.listMeters(any(), any())).thenReturn(meterCollection);
+
+        assertThrows(NoSuchMeterException.class,
+                () -> service.listMeterUsage("unknown_event", "cus_test", null, null, null));
+        verify(gateway, never()).listMeterEventSummaries(any(), any(), any());
+    }
+
+    @Test
+    void listMeterUsage_blankCustomerId_rejectedBeforeAnyNetworkCall() throws StripeException {
+        assertThrows(BadRequestException.class,
+                () -> service.listMeterUsage("api_requests", " ", null, null, null));
+        verifyNoInteractions(gateway);
+    }
+
+    @Test
+    void listMeterUsage_blankEventName_rejectedBeforeAnyNetworkCall() {
+        assertThrows(BadRequestException.class,
+                () -> service.listMeterUsage(" ", "cus_test", null, null, null));
+    }
+
+    @Test
+    void listMeterUsage_invalidWindow_rejected() {
+        assertThrows(BadRequestException.class,
+                () -> service.listMeterUsage("api_requests", "cus_test", null, null, "week"));
+    }
+
+    @Test
+    void listMeterUsage_startAfterEnd_rejected() {
+        final var start = Instant.parse("2026-11-15T00:00:00Z");
+        assertThrows(BadRequestException.class,
+                () -> service.listMeterUsage("api_requests", "cus_test", start, start, null));
+    }
+
+    // --- recordMeterEvent hardening: structured error detection ---
+
+    @Test
+    void recordMeterEvent_structuredErrorMessage_stillThrowsNoSuchMeter() throws StripeException {
+        final var e = mock(StripeException.class);
+        final var stripeError = mock(com.stripe.model.StripeError.class);
+        when(e.getStripeError()).thenReturn(stripeError);
+        when(stripeError.getMessage()).thenReturn("No active meter found for event name api_requests.");
+        when(e.getMessage()).thenReturn(null); // top-level message deliberately unhelpful
+        when(gateway.createMeterEvent(any(), any(), any())).thenThrow(e);
+
+        final var thrown = assertThrows(NoSuchMeterException.class,
+                () -> service.recordMeterEvent("cus_test", "api_requests", java.math.BigDecimal.ONE, "idem-key"));
+        assertTrue(thrown.getMessage().contains("api_requests"));
     }
 
 }

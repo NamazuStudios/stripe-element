@@ -9,6 +9,8 @@ import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
 import dev.getelements.elements.stripe.model.MeterSummary;
+import dev.getelements.elements.stripe.model.MeterUsageSummary;
+import dev.getelements.elements.stripe.model.MeterUsageSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
@@ -17,6 +19,7 @@ import dev.getelements.elements.stripe.model.SubscriptionListResponse;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -232,6 +235,47 @@ public interface StripeService {
 
     /** Mode-aware variant of {@link #listMeters(boolean, int)}. */
     List<MeterSummary> listMeters(boolean activeOnly, int limit, StripeMode mode);
+
+    /**
+     * Lists aggregated meter usage for the given meter event name and customer. This is the
+     * read-side counterpart to {@link #recordMeterEvent}: Stripe's v1 REST API deliberately
+     * exposes no listing of raw meter events (the meter-event object is write-only), so verifying
+     * that recorded usage actually landed is done against these aggregates — sum
+     * {@link MeterUsageSummary#aggregatedValue()} over the window(s) of interest and compare
+     * against the quantity the caller's own ledger recorded for the same customer, meter, and
+     * time range.
+     *
+     * <p>Both {@code customerId} and a meter for {@code eventName} are required by Stripe:
+     * a missing/blank customer ID is rejected up front, and an unknown or inactive event name
+     * raises {@link NoSuchMeterException} without a network call. Unresolvable time ranges are
+     * defaulted to the trailing 24 hours; boundaries are aligned per {@code window} (Stripe
+     * requires minute alignment generally and hour alignment for {@code "hour"}).
+     *
+     * @param eventName  the meter event name (as passed to {@link #recordMeterEvent}); required
+     * @param customerId Stripe customer ID ({@code cus_...}); required by Stripe's summaries API
+     * @param startTime  window start (inclusive), or {@code null} for {@code endTime} minus 24 hours
+     * @param endTime    window end (exclusive), or {@code null} for now
+     * @param window     {@code "hour"} to bucket the results, or {@code null} for a single
+     *                   aggregate over the whole range (Stripe's API also supports {@code "day"};
+     *                   the bundled stripe-java version's generated params don't yet)
+     */
+    default List<MeterUsageSummary> listMeterUsage(
+            String eventName,
+            String customerId,
+            Instant startTime,
+            Instant endTime,
+            String window) {
+        return listMeterUsage(eventName, customerId, startTime, endTime, window, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listMeterUsage(String, String, Instant, Instant, String)}. */
+    List<MeterUsageSummary> listMeterUsage(
+            String eventName,
+            String customerId,
+            Instant startTime,
+            Instant endTime,
+            String window,
+            StripeMode mode);
 
     /**
      * Resolves the active recurring Price billing usage for the given meter event name — i.e. the

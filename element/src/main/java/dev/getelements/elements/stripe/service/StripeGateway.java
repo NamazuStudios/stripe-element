@@ -15,6 +15,7 @@ import com.stripe.model.Subscription;
 import com.stripe.model.SubscriptionCollection;
 import com.stripe.model.billing.MeterCollection;
 import com.stripe.model.billing.MeterEvent;
+import com.stripe.model.billing.MeterEventSummaryCollection;
 import com.stripe.model.billingportal.Session;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
@@ -28,6 +29,7 @@ import com.stripe.param.SetupIntentCreateParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.billing.MeterEventCreateParams;
+import com.stripe.param.billing.MeterEventSummaryListParams;
 import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 import dev.getelements.elements.stripe.model.StripeMode;
@@ -71,6 +73,8 @@ public interface StripeGateway {
     Product retrieveProduct(String productId, StripeMode mode) throws StripeException;
 
     MeterCollection listMeters(MeterListParams params, StripeMode mode) throws StripeException;
+
+    MeterEventSummaryCollection listMeterEventSummaries(String meterId, MeterEventSummaryListParams params, StripeMode mode) throws StripeException;
 
     CustomerSearchResult searchCustomers(CustomerSearchParams params, StripeMode mode) throws StripeException;
 
