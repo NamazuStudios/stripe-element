@@ -2,6 +2,7 @@ package dev.getelements.elements.stripe.service;
 
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
+import com.stripe.model.CustomerCollection;
 import com.stripe.model.CustomerSearchResult;
 import com.stripe.model.InvoiceCollection;
 import com.stripe.model.PaymentIntent;
@@ -18,6 +19,7 @@ import com.stripe.model.billing.MeterEvent;
 import com.stripe.model.billing.MeterEventSummaryCollection;
 import com.stripe.model.billingportal.Session;
 import com.stripe.param.CustomerCreateParams;
+import com.stripe.param.CustomerListParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
 import com.stripe.param.CustomerSearchParams;
 import com.stripe.param.CustomerUpdateParams;
@@ -77,6 +79,8 @@ public interface StripeGateway {
     MeterEventSummaryCollection listMeterEventSummaries(String meterId, MeterEventSummaryListParams params, StripeMode mode) throws StripeException;
 
     CustomerSearchResult searchCustomers(CustomerSearchParams params, StripeMode mode) throws StripeException;
+
+    CustomerCollection listCustomers(CustomerListParams params, StripeMode mode) throws StripeException;
 
     InvoiceCollection listInvoices(InvoiceListParams params, StripeMode mode) throws StripeException;
 

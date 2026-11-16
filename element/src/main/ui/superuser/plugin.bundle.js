@@ -18,31 +18,63 @@
     { id: "production", label: "Production" },
     { id: "sandbox", label: "Sandbox" }
   ];
+  function SecretField({
+    label,
+    hint,
+    placeholder,
+    value,
+    onChange
+  }) {
+    const [revealed, setRevealed] = React.useState(false);
+    const inputId = React.useId();
+    return /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between" }, /* @__PURE__ */ React.createElement("label", { htmlFor: inputId, className: "text-sm font-medium" }, label), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: () => setRevealed((r) => !r),
+        "aria-pressed": revealed,
+        className: "text-xs text-muted-foreground hover:text-foreground transition-colors"
+      },
+      revealed ? "Hide" : "Show"
+    )), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        id: inputId,
+        type: revealed ? "text" : "password",
+        value,
+        onChange: (e) => onChange(e.target.value),
+        placeholder,
+        autoComplete: "off",
+        spellCheck: false,
+        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      }
+    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, hint));
+  }
   function ConfigFields({
     description,
     apiKeyPlaceholder,
     config,
     onChange
   }) {
-    return /* @__PURE__ */ React.createElement("fieldset", { className: "space-y-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, description), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "API Key"), /* @__PURE__ */ React.createElement(
-      "input",
+    return /* @__PURE__ */ React.createElement("fieldset", { className: "space-y-5" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, description), /* @__PURE__ */ React.createElement(
+      SecretField,
       {
-        type: "password",
-        value: config.apiKey,
-        onChange: (e) => onChange({ ...config, apiKey: e.target.value }),
+        label: "API Key",
+        hint: "The Stripe secret key used for PaymentIntent and Subscription API calls.",
         placeholder: apiKeyPlaceholder,
-        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        value: config.apiKey,
+        onChange: (apiKey) => onChange({ ...config, apiKey })
       }
-    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, "The Stripe secret key used for PaymentIntent and Subscription API calls.")), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Webhook Signing Secret"), /* @__PURE__ */ React.createElement(
-      "input",
+    ), /* @__PURE__ */ React.createElement(
+      SecretField,
       {
-        type: "password",
-        value: config.webhookSecret,
-        onChange: (e) => onChange({ ...config, webhookSecret: e.target.value }),
+        label: "Webhook Signing Secret",
+        hint: /* @__PURE__ */ React.createElement(React.Fragment, null, "Found in the Stripe Dashboard under Developers → Webhooks. Must use the Account (not v2) webhook type."),
         placeholder: "whsec_…",
-        className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        value: config.webhookSecret,
+        onChange: (webhookSecret) => onChange({ ...config, webhookSecret })
       }
-    ), /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground" }, "Found in the Stripe Dashboard under Developers → Webhooks. Must use the Account (not v2) webhook type.")));
+    ));
   }
   function StripeConfigPlugin() {
     const [activeMode, setActiveMode] = React.useState("production");
@@ -91,7 +123,7 @@
     if (loading) {
       return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "Loading configuration…"));
     }
-    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and override the Element’s default attributes. Values are masked on load. Both sets of credentials can be configured at once and selected per request via the header:", /* @__PURE__ */ React.createElement("code", null, "X-Stripe-Mode: (production/sandbox)"), " ", "Requests that omit the header use production if configured, sandbox otherwise."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-6" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-border" }, /* @__PURE__ */ React.createElement("nav", { className: "flex gap-1", "aria-label": "Stripe mode tabs" }, MODE_TABS.map((tab) => /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and override the Element’s default attributes. Values are hidden by default; use Show to reveal them. Both sets of credentials can be configured at once and selected per request via the header:", /* @__PURE__ */ React.createElement("code", null, "X-Stripe-Mode: (production/sandbox)"), " ", "Requests that omit the header use production if configured, sandbox otherwise."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-6" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-border" }, /* @__PURE__ */ React.createElement("nav", { className: "flex gap-1", "aria-label": "Stripe mode tabs" }, MODE_TABS.map((tab) => /* @__PURE__ */ React.createElement(
       "button",
       {
         key: tab.id,
@@ -284,6 +316,157 @@
       },
       loading ? "Loading…" : "Load more"
     ))));
+  }
+  const MODES = ["production", "sandbox"];
+  const USAGE_DAYS = 7;
+  function stripeDashboardUrl(mode, path) {
+    return mode === "sandbox" ? `https://dashboard.stripe.com/test${path}` : `https://dashboard.stripe.com${path}`;
+  }
+  function displayName(c) {
+    return c.name || c.metadata["orgName"] || c.metadata["name"] || c.email || "—";
+  }
+  function StripeCustomersPlugin() {
+    const limit = defaultLimit();
+    const [mode, setMode] = React.useState("production");
+    const [customers, setCustomers] = React.useState(null);
+    const [meters, setMeters] = React.useState([]);
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState(null);
+    const [expanded, setExpanded] = React.useState(null);
+    const [copied, setCopied] = React.useState(null);
+    async function fetchCustomers(selectedMode) {
+      setLoading(true);
+      setError(null);
+      setExpanded(null);
+      try {
+        const res = await fetch(`/element/stripe/api/stripe/customers?limit=${Math.max(limit, 100)}`, {
+          credentials: "include",
+          headers: { ...sessionHeaders(), "X-Stripe-Mode": selectedMode }
+        });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        setCustomers(await res.json());
+        const metersRes = await fetch("/element/stripe/api/stripe/meters?active=true&limit=100", {
+          credentials: "include",
+          headers: { ...sessionHeaders(), "X-Stripe-Mode": selectedMode }
+        });
+        if (metersRes.ok) setMeters(await metersRes.json());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    }
+    React.useEffect(() => {
+      fetchCustomers(mode);
+    }, [mode]);
+    function handleCopy(id) {
+      navigator.clipboard.writeText(id).then(() => {
+        setCopied(id);
+        setTimeout(() => setCopied(null), 2e3);
+      });
+    }
+    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-6xl" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between mb-1" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold" }, "Customers / Billing"), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value: mode,
+        onChange: (e) => setMode(e.target.value),
+        className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      },
+      MODES.map((m) => /* @__PURE__ */ React.createElement("option", { key: m, value: m }, m === "production" ? "Production (live)" : "Sandbox (test)"))
+    ), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => fetchCustomers(mode),
+        disabled: loading,
+        className: "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
+      },
+      loading ? "Refreshing…" : "Refresh"
+    ))), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Every customer on this Stripe account in the selected mode — each one is billing-enabled there. Expand a row for its recent metered usage (last ", USAGE_DAYS, " days, per meter, from Stripe's aggregates) and subscriptions. Cross-check posting decisions in the Postings tab."), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), customers && customers.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No customers exist in ", mode, " mode yet."), customers && customers.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Customer ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Name"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Email"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Created"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Stripe"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2" }))), /* @__PURE__ */ React.createElement("tbody", null, customers.map((c, i) => {
+      const isExpanded = expanded === c.id;
+      return /* @__PURE__ */ React.createElement(React.Fragment, { key: c.id }, /* @__PURE__ */ React.createElement("tr", { className: `${i % 2 === 0 ? "" : "bg-muted/20"} ${isExpanded ? "bg-muted/40" : ""}` }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          onClick: () => handleCopy(c.id),
+          title: "Copy customer ID",
+          className: "hover:underline"
+        },
+        c.id,
+        copied === c.id && /* @__PURE__ */ React.createElement("span", { className: "ml-1 text-green-600" }, "copied!")
+      )), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, displayName(c)), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs" }, c.email ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs" }, c.created ? new Date(c.created).toLocaleDateString() : "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs" }, /* @__PURE__ */ React.createElement(
+        "a",
+        {
+          href: stripeDashboardUrl(mode, `/customers/${c.id}`),
+          target: "_blank",
+          rel: "noreferrer",
+          className: "text-primary hover:underline"
+        },
+        "Dashboard ↗"
+      ), /* @__PURE__ */ React.createElement("span", { className: "mx-1 text-muted-foreground" }, "·"), /* @__PURE__ */ React.createElement(
+        "a",
+        {
+          href: stripeDashboardUrl(mode, "/billing/meters"),
+          target: "_blank",
+          rel: "noreferrer",
+          className: "text-primary hover:underline"
+        },
+        "Meters ↗"
+      )), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-right" }, /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          onClick: () => setExpanded(isExpanded ? null : c.id),
+          className: "rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/40 transition-colors"
+        },
+        isExpanded ? "Hide" : "Usage"
+      ))), isExpanded && /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { colSpan: 6, className: "px-4 py-3 bg-muted/10" }, /* @__PURE__ */ React.createElement(CustomerDetail, { customerId: c.id, mode, meters }))));
+    })))));
+  }
+  function CustomerDetail({ customerId, mode, meters }) {
+    const [usage, setUsage] = React.useState({});
+    const [subscriptions, setSubscriptions] = React.useState(null);
+    const [loading, setLoading] = React.useState(true);
+    React.useEffect(() => {
+      let cancelled = false;
+      async function load() {
+        setLoading(true);
+        const headers = { ...sessionHeaders(), "X-Stripe-Mode": mode };
+        const end = /* @__PURE__ */ new Date();
+        const start = new Date(end.getTime() - USAGE_DAYS * 24 * 3600 * 1e3);
+        const range = `&start=${start.toISOString().slice(0, 17)}00Z&end=${end.toISOString().slice(0, 17)}00Z`;
+        const usageResult = {};
+        await Promise.all(meters.map(async (m) => {
+          try {
+            const res = await fetch(
+              `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(customerId)}${range}`,
+              { credentials: "include", headers }
+            );
+            usageResult[m.eventName] = res.ok ? await res.json() : "error";
+          } catch {
+            usageResult[m.eventName] = "error";
+          }
+        }));
+        if (cancelled) return;
+        setUsage(usageResult);
+        try {
+          const res = await fetch(
+            `/element/stripe/api/stripe/customer/${encodeURIComponent(customerId)}/subscriptions?limit=5`,
+            { credentials: "include", headers }
+          );
+          if (res.ok && !cancelled) setSubscriptions((await res.json()).subscriptions);
+        } catch {
+        }
+        if (!cancelled) setLoading(false);
+      }
+      load();
+      return () => {
+        cancelled = true;
+      };
+    }, [customerId, mode, meters]);
+    const hasUsage = Object.values(usage).some((u) => Array.isArray(u) && u.length > 0);
+    return /* @__PURE__ */ React.createElement("div", { className: "text-xs space-y-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "font-medium mb-1 text-muted-foreground" }, "Metered usage, last ", USAGE_DAYS, " days (Stripe aggregates)"), meters.length === 0 ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No active meters on this account.") : loading ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "Loading\\u2026") : !hasUsage ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No usage recorded for this customer in the window.") : /* @__PURE__ */ React.createElement("table", { className: "w-full max-w-lg" }, /* @__PURE__ */ React.createElement("tbody", null, meters.map((m) => {
+      const u = usage[m.eventName];
+      const total = Array.isArray(u) ? u.reduce((sum, s) => sum + parseFloat(s.aggregatedValue ?? "0"), 0) : null;
+      return /* @__PURE__ */ React.createElement("tr", { key: m.eventName }, /* @__PURE__ */ React.createElement("td", { className: "py-0.5 pr-4 font-mono" }, m.eventName), /* @__PURE__ */ React.createElement("td", { className: "py-0.5 text-right font-medium" }, total === null ? /* @__PURE__ */ React.createElement("span", { className: "text-destructive" }, "error") : Number.isInteger(total) ? total : total.toFixed(4)));
+    })))), subscriptions && subscriptions.length > 0 && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "font-medium mb-1 text-muted-foreground" }, "Subscriptions"), subscriptions.map((s) => /* @__PURE__ */ React.createElement("p", { key: s.subscriptionId, className: "font-mono" }, s.subscriptionId, " · ", /* @__PURE__ */ React.createElement("span", null, s.status), s.currentPeriodEnd && /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, " · renews ", new Date(s.currentPeriodEnd).toLocaleDateString())))));
   }
   const EVENT_TYPE_OPTIONS = [
     { value: "", label: "All types" },
@@ -479,6 +662,7 @@
   const TABS = [
     { id: "config", label: "Configuration" },
     { id: "billing", label: "Billing" },
+    { id: "customers", label: "Customers" },
     { id: "postings", label: "Postings" },
     { id: "events", label: "Events" }
   ];
@@ -492,7 +676,7 @@
         className: `px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`
       },
       tab.label
-    )))), activeTab === "config" && /* @__PURE__ */ React.createElement(StripeConfigPlugin, null), activeTab === "billing" && /* @__PURE__ */ React.createElement(StripeBillingPlugin, null), activeTab === "postings" && /* @__PURE__ */ React.createElement(StripePostingPlugin, null), activeTab === "events" && /* @__PURE__ */ React.createElement(StripeEventLogPlugin, null));
+    )))), activeTab === "config" && /* @__PURE__ */ React.createElement(StripeConfigPlugin, null), activeTab === "billing" && /* @__PURE__ */ React.createElement(StripeBillingPlugin, null), activeTab === "customers" && /* @__PURE__ */ React.createElement(StripeCustomersPlugin, null), activeTab === "postings" && /* @__PURE__ */ React.createElement(StripePostingPlugin, null), activeTab === "events" && /* @__PURE__ */ React.createElement(StripeEventLogPlugin, null));
   }
   (_a = window.__elementsPlugins) == null ? void 0 : _a.register("stripe", StripePlugin);
 })(window.React);

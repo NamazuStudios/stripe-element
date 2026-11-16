@@ -8,6 +8,7 @@ import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreatePortalSessionResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
+import dev.getelements.elements.stripe.model.CustomerSummary;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
@@ -211,6 +212,24 @@ public class StripePaymentEndpoint {
         return mode != null
                 ? stripeService.retrievePrice(priceId, mode)
                 : stripeService.retrievePrice(priceId);
+    }
+
+    @GET
+    @Path("/customers")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "List Stripe customers",
+            description = "Returns this account's own Stripe customers in the selected mode — the discovery side of " +
+                    "the billing-posture view: a customer present here is billing-enabled in that mode.",
+            security = {@SecurityRequirement(name = SESSION_SECRET)}
+    )
+    public List<CustomerSummary> listCustomers(
+            @QueryParam("limit") @DefaultValue("100") int limit,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.listCustomers(limit, mode)
+                : stripeService.listCustomers(limit);
     }
 
     @GET

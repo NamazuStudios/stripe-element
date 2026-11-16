@@ -3,6 +3,7 @@ package dev.getelements.elements.stripe.service;
 import com.google.inject.Inject;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
+import com.stripe.model.CustomerCollection;
 import com.stripe.model.CustomerSearchResult;
 import com.stripe.model.Invoice;
 import com.stripe.model.InvoiceCollection;
@@ -23,6 +24,7 @@ import com.stripe.model.billing.MeterEventSummaryCollection;
 import com.stripe.model.billingportal.Session;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.CustomerCreateParams;
+import com.stripe.param.CustomerListParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
 import com.stripe.param.CustomerSearchParams;
 import com.stripe.param.CustomerUpdateParams;
@@ -142,6 +144,11 @@ public class DefaultStripeGateway implements StripeGateway {
     @Override
     public CustomerSearchResult searchCustomers(CustomerSearchParams params, StripeMode mode) throws StripeException {
         return Customer.search(params, options(mode));
+    }
+
+    @Override
+    public CustomerCollection listCustomers(CustomerListParams params, StripeMode mode) throws StripeException {
+        return Customer.list(params, options(mode));
     }
 
     @Override

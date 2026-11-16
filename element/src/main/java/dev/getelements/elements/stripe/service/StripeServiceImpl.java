@@ -6,6 +6,7 @@ import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
 import com.stripe.param.CustomerSearchParams;
 import com.stripe.param.CustomerUpdateParams;
+import com.stripe.param.CustomerListParams;
 import com.stripe.param.InvoiceListParams;
 import com.stripe.param.PriceListParams;
 import com.stripe.param.ProductListParams;
@@ -31,6 +32,7 @@ import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
+import dev.getelements.elements.stripe.model.CustomerSummary;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.MeterSummary;
 import dev.getelements.elements.stripe.model.MeterUsageSummary;
@@ -618,6 +620,29 @@ public class StripeServiceImpl implements StripeService {
             return gateway.searchCustomers(params, mode).getData().stream()
                     .findFirst()
                     .map(Customer::getId);
+
+        } catch (StripeException e) {
+            throw stripeError(e);
+        }
+    }
+
+    @Override
+    public List<CustomerSummary> listCustomers(int limit, StripeMode mode) {
+
+        try {
+
+            final var params = CustomerListParams.builder()
+                    .setLimit((long) limit)
+                    .build();
+
+            return gateway.listCustomers(params, mode).getData().stream()
+                    .map(c -> new CustomerSummary(
+                            c.getId(),
+                            c.getName(),
+                            c.getEmail(),
+                            c.getMetadata() != null ? c.getMetadata() : java.util.Map.of(),
+                            c.getCreated() != null ? Instant.ofEpochSecond(c.getCreated()).toString() : null))
+                    .toList();
 
         } catch (StripeException e) {
             throw stripeError(e);

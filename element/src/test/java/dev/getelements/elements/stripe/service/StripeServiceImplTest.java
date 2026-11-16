@@ -2,6 +2,7 @@ package dev.getelements.elements.stripe.service;
 
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
+import com.stripe.model.CustomerCollection;
 import com.stripe.model.CustomerSearchResult;
 import com.stripe.model.Invoice;
 import com.stripe.model.InvoiceCollection;
@@ -850,7 +851,6 @@ class StripeServiceImplTest {
     }
 
     // --- listMeterUsage ---
-
     private com.stripe.model.billing.MeterCollection mockMeterCatalogue() throws StripeException {
         final var meter = mock(com.stripe.model.billing.Meter.class);
         when(meter.getEventName()).thenReturn("api_requests");
@@ -996,6 +996,49 @@ class StripeServiceImplTest {
         final var start = Instant.parse("2026-11-15T00:00:00Z");
         assertThrows(BadRequestException.class,
                 () -> service.listMeterUsage("api_requests", "cus_test", start, start, null));
+    }
+
+    // --- listCustomers ---
+
+    @Test
+    void listCustomers_mapsSummariesCorrectly() throws StripeException {
+        final var customer = mock(Customer.class);
+        when(customer.getId()).thenReturn("cus_001");
+        when(customer.getName()).thenReturn("Acme");
+        when(customer.getEmail()).thenReturn("billing@acme.test");
+        when(customer.getMetadata()).thenReturn(java.util.Map.of("orgId", "org-1"));
+        when(customer.getCreated()).thenReturn(1700000000L);
+        final var collection = mock(CustomerCollection.class);
+        when(collection.getData()).thenReturn(List.of(customer));
+        when(gateway.listCustomers(any(), any())).thenReturn(collection);
+
+        final var result = service.listCustomers(100);
+
+        assertEquals(1, result.size());
+        final var summary = result.getFirst();
+        assertEquals("cus_001", summary.id());
+        assertEquals("Acme", summary.name());
+        assertEquals("billing@acme.test", summary.email());
+        assertEquals(java.util.Map.of("orgId", "org-1"), summary.metadata());
+        assertEquals(Instant.ofEpochSecond(1700000000L).toString(), summary.created());
+
+        verify(gateway).listCustomers(argThat(p -> p.getLimit() == 100L), any());
+    }
+
+    @Test
+    void listCustomers_nullMetadata_becomesEmptyMap() throws StripeException {
+        final var customer = mock(Customer.class);
+        when(customer.getId()).thenReturn("cus_002");
+        when(customer.getMetadata()).thenReturn(null);
+        when(customer.getCreated()).thenReturn(null);
+        final var collection = mock(CustomerCollection.class);
+        when(collection.getData()).thenReturn(List.of(customer));
+        when(gateway.listCustomers(any(), any())).thenReturn(collection);
+
+        final var result = service.listCustomers(100);
+
+        assertTrue(result.getFirst().metadata().isEmpty());
+        assertNull(result.getFirst().created());
     }
 
     // --- recordMeterEvent hardening: structured error detection ---

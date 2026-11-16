@@ -1,16 +1,18 @@
 import React from 'react'
 import { StripeConfigPlugin } from './StripeConfigPlugin'
 import { StripeBillingPlugin } from './StripeBillingPlugin'
+import { StripeCustomersPlugin } from './StripeCustomersPlugin'
 import { StripeEventLogPlugin } from './StripeEventLogPlugin'
 import { StripePostingPlugin } from './StripePostingPlugin'
 
-type Tab = 'config' | 'billing' | 'postings' | 'events'
+type Tab = 'config' | 'billing' | 'customers' | 'postings' | 'events'
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'config',   label: 'Configuration' },
-  { id: 'billing',  label: 'Billing' },
-  { id: 'postings', label: 'Postings' },
-  { id: 'events',   label: 'Events' },
+  { id: 'config',    label: 'Configuration' },
+  { id: 'billing',   label: 'Billing' },
+  { id: 'customers', label: 'Customers' },
+  { id: 'postings',  label: 'Postings' },
+  { id: 'events',    label: 'Events' },
 ]
 
 export function StripePlugin() {
@@ -36,10 +38,11 @@ export function StripePlugin() {
         </nav>
       </div>
 
-      {activeTab === 'config'   && <StripeConfigPlugin />}
-      {activeTab === 'billing'  && <StripeBillingPlugin />}
-      {activeTab === 'postings' && <StripePostingPlugin />}
-      {activeTab === 'events'   && <StripeEventLogPlugin />}
+      {activeTab === 'config'    && <StripeConfigPlugin />}
+      {activeTab === 'billing'   && <StripeBillingPlugin />}
+      {activeTab === 'customers' && <StripeCustomersPlugin />}
+      {activeTab === 'postings'  && <StripePostingPlugin />}
+      {activeTab === 'events'    && <StripeEventLogPlugin />}
     </div>
   )
 }

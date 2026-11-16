@@ -4,6 +4,7 @@ import dev.getelements.elements.stripe.model.CreateCheckoutSessionRequest;
 import dev.getelements.elements.stripe.model.CreateCheckoutSessionResponse;
 import dev.getelements.elements.stripe.model.CreateCustomerResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
+import dev.getelements.elements.stripe.model.CustomerSummary;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
@@ -341,6 +342,20 @@ public interface StripeService {
 
     /** Mode-aware variant of {@link #findCustomerByMetadata(String, String)}. */
     Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue, StripeMode mode);
+
+    /**
+     * Lists this account's own Stripe customers — the discovery side of the billing-posture
+     * view: which customers exist in a given mode, rather than what the consumer's bookkeeping
+     * believes. Customers found here in a mode are, by definition, billing-enabled in it.
+     *
+     * @param limit maximum results to return (1–100)
+     */
+    default List<CustomerSummary> listCustomers(int limit) {
+        return listCustomers(limit, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listCustomers(int)}. */
+    List<CustomerSummary> listCustomers(int limit, StripeMode mode);
 
     /**
      * Creates a Stripe-hosted Checkout Session and returns the redirect URL. The customer is sent
