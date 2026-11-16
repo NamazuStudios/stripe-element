@@ -2,6 +2,7 @@ package dev.getelements.elements.stripe;
 
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
+import com.stripe.model.CustomerCollection;
 import com.stripe.model.CustomerSearchResult;
 import com.stripe.model.Invoice;
 import com.stripe.model.InvoiceCollection;
@@ -16,10 +17,13 @@ import com.stripe.model.Subscription;
 import com.stripe.model.SubscriptionCollection;
 import com.stripe.model.billing.Meter;
 import com.stripe.model.billing.MeterCollection;
+import com.stripe.model.billing.MeterEventSummary;
+import com.stripe.model.billing.MeterEventSummaryCollection;
 import com.stripe.model.billing.MeterEvent;
 import com.stripe.model.billingportal.Session;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.CustomerCreateParams;
+import com.stripe.param.CustomerListParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
 import com.stripe.param.CustomerSearchParams;
 import com.stripe.param.CustomerUpdateParams;
@@ -33,6 +37,7 @@ import com.stripe.param.SubscriptionCancelParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.billing.MeterEventCreateParams;
+import com.stripe.param.billing.MeterEventSummaryListParams;
 import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 import dev.getelements.elements.stripe.model.StripeMode;
@@ -133,6 +138,16 @@ class LiveStripeGateway implements StripeGateway {
     @Override
     public MeterCollection listMeters(MeterListParams params, StripeMode mode) throws StripeException {
         return Meter.list(params);
+    }
+
+    @Override
+    public MeterEventSummaryCollection listMeterEventSummaries(String meterId, MeterEventSummaryListParams params, StripeMode mode) throws StripeException {
+        return MeterEventSummary.list(meterId, params);
+    }
+
+    @Override
+    public CustomerCollection listCustomers(CustomerListParams params, StripeMode mode) throws StripeException {
+        return Customer.list(params);
     }
 
     @Override
