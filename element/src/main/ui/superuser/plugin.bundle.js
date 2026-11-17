@@ -272,7 +272,7 @@
     }, [usage]);
     return { loading, paymentMethods, upcoming, charges, invoices, intents, subscriptions, usage, usageByDay, usageWeekTotals };
   }
-  const OUTCOME_STYLES = {
+  const OUTCOME_STYLES$1 = {
     POSTED: "bg-green-500/10 text-green-700 dark:text-green-400",
     RECOVERED_STALE_PENDING: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
     FAILED: "bg-destructive/10 text-destructive",
@@ -308,7 +308,7 @@
     }, [customerId]);
     return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h2", { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2" }, "Posting ledger"), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-3" }, error), result && result.records.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No posting records for this customer. Consumer elements only record skips here — postings made via recordMeterEvent are recorded automatically; an empty ledger with no failed charges usually means nothing was posted or skipped for this customer."), result && result.records.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto mb-3" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Time"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Outcome"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Mode"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Identifier"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Event"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-right font-medium text-muted-foreground" }, "Qty"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Detail"))), /* @__PURE__ */ React.createElement("tbody", null, result.records.map((rec, i) => {
       var _a2;
-      return /* @__PURE__ */ React.createElement("tr", { key: `${rec.identifier}-${rec.at}-${i}`, className: i % 2 === 0 ? "" : "bg-muted/20" }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs whitespace-nowrap" }, new Date(rec.at).toLocaleString()), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, /* @__PURE__ */ React.createElement("span", { className: `inline-block rounded px-2 py-0.5 text-xs font-medium ${OUTCOME_STYLES[rec.outcome ?? ""] ?? "bg-muted text-muted-foreground"}` }, rec.outcome ?? "?")), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs" }, ((_a2 = rec.mode) == null ? void 0 : _a2.toLowerCase()) ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, rec.identifier), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs" }, rec.eventName ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs text-right" }, rec.quantity ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs text-muted-foreground max-w-xs truncate", title: rec.detail ?? "" }, rec.detail ?? ""));
+      return /* @__PURE__ */ React.createElement("tr", { key: `${rec.identifier}-${rec.at}-${i}`, className: i % 2 === 0 ? "" : "bg-muted/20" }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs whitespace-nowrap" }, new Date(rec.at).toLocaleString()), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, /* @__PURE__ */ React.createElement("span", { className: `inline-block rounded px-2 py-0.5 text-xs font-medium ${OUTCOME_STYLES$1[rec.outcome ?? ""] ?? "bg-muted text-muted-foreground"}` }, rec.outcome ?? "?")), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs" }, ((_a2 = rec.mode) == null ? void 0 : _a2.toLowerCase()) ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, rec.identifier), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs" }, rec.eventName ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs text-right" }, rec.quantity ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs text-muted-foreground max-w-xs truncate", title: rec.detail ?? "" }, rec.detail ?? ""));
     })))), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3 text-sm" }, /* @__PURE__ */ React.createElement(
       "button",
       {
@@ -682,9 +682,132 @@
       "Next →"
     )))));
   }
+  const MODE_OPTIONS = [
+    { value: "both", label: "Both modes" },
+    { value: "sandbox", label: "Sandbox" },
+    { value: "production", label: "Production" }
+  ];
+  const OUTCOME_OPTIONS = [
+    { value: "", label: "All outcomes" },
+    { value: "POSTED", label: "Posted" },
+    { value: "FAILED", label: "Failed" },
+    { value: "SKIPPED_EXEMPT", label: "Skipped (exempt)" },
+    { value: "SKIPPED_NO_CUSTOMER", label: "Skipped (no customer)" },
+    { value: "RECOVERED_STALE_PENDING", label: "Recovered stale pending" }
+  ];
+  const OUTCOME_STYLES = {
+    POSTED: "bg-green-500/10 text-green-700 dark:text-green-400",
+    RECOVERED_STALE_PENDING: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+    FAILED: "bg-destructive/10 text-destructive",
+    SKIPPED_EXEMPT: "bg-muted text-muted-foreground",
+    SKIPPED_NO_CUSTOMER: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-500"
+  };
+  function StripePostingPlugin() {
+    const limit = defaultLimit();
+    const [mode, setMode] = React.useState("both");
+    const [outcome, setOutcome] = React.useState("");
+    const [customer, setCustomer] = React.useState("");
+    const [offset, setOffset] = React.useState(0);
+    const [result, setResult] = React.useState(null);
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState(null);
+    const [copied, setCopied] = React.useState(null);
+    async function fetchPostings(newOffset) {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({ limit: String(limit), offset: String(newOffset), mode });
+        if (outcome) params.set("outcome", outcome);
+        if (customer.trim()) params.set("customer", customer.trim());
+        const res = await fetch(`/element/stripe/api/stripe/postings?${params}`, {
+          credentials: "include",
+          headers: sessionHeaders()
+        });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        setResult(await res.json());
+        setOffset(newOffset);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    }
+    React.useEffect(() => {
+      fetchPostings(0);
+    }, [mode, outcome, customer]);
+    const page = Math.floor(offset / limit) + 1;
+    const totalPages = result ? Math.ceil(result.total / limit) : 1;
+    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-6xl" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between mb-1" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold" }, "Meter Event Postings"), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => fetchPostings(offset),
+        disabled: loading,
+        className: "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
+      },
+      loading ? "Refreshing…" : "Refresh"
+    )), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "The global posting ledger: what each billing meter-event posting attempt actually did, newest first. Postings and failures made via recordMeterEvent are recorded automatically by this element; skips (exempt / no customer) are recorded by consumer elements at their reconciliation decision points. Click a customer ID to copy it, or open the customer in the Customers tab for its full billing view."), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3 mb-4 items-end" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium" }, "Mode"), /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value: mode,
+        onChange: (e) => setMode(e.target.value),
+        className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      },
+      MODE_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.value, value: o.value }, o.label))
+    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium" }, "Outcome"), /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value: outcome,
+        onChange: (e) => setOutcome(e.target.value),
+        className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      },
+      OUTCOME_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.value, value: o.value }, o.label))
+    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium" }, "Customer ID"), /* @__PURE__ */ React.createElement(
+      "input",
+      {
+        value: customer,
+        onChange: (e) => setCustomer(e.target.value),
+        placeholder: "cus_... (exact match)",
+        className: "w-64 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-ring"
+      }
+    ))), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), result && (result.records.length === 0 ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No posting records found. The ledger fills as meter events are posted (recorded automatically) and as consumer elements record their skip decisions — if nothing has posted since this feature deployed and the consumer wiring isn't in place yet, it will be empty.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto mb-4" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Time"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Outcome"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Mode"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Identifier"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Customer"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Event"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-right font-medium text-muted-foreground" }, "Qty"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Detail"))), /* @__PURE__ */ React.createElement("tbody", null, result.records.map((rec, i) => {
+      var _a2;
+      return /* @__PURE__ */ React.createElement("tr", { key: `${rec.identifier}-${rec.at}-${i}`, className: i % 2 === 0 ? "" : "bg-muted/20" }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs whitespace-nowrap" }, new Date(rec.at).toLocaleString()), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, /* @__PURE__ */ React.createElement("span", { className: `inline-block rounded px-2 py-0.5 text-xs font-medium ${OUTCOME_STYLES[rec.outcome ?? ""] ?? "bg-muted text-muted-foreground"}` }, rec.outcome ?? "?")), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs" }, ((_a2 = rec.mode) == null ? void 0 : _a2.toLowerCase()) ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, rec.identifier), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ React.createElement(
+        "button",
+        {
+          onClick: () => {
+            if (!rec.customerId) return;
+            navigator.clipboard.writeText(rec.customerId).then(() => {
+              setCopied(rec.customerId);
+              setTimeout(() => setCopied(null), 2e3);
+            });
+          },
+          title: rec.customerId ? "Copy customer ID" : void 0,
+          className: "truncate max-w-[10rem] text-left hover:underline"
+        },
+        rec.customerId ?? "—"
+      ), /* @__PURE__ */ React.createElement("span", { className: "w-14 shrink-0 text-[10px] text-green-600" }, copied && rec.customerId === copied ? "copied!" : ""))), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs" }, rec.eventName ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs text-right" }, rec.quantity ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs text-muted-foreground max-w-xs truncate", title: rec.detail ?? "" }, rec.detail ?? ""));
+    })))), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3 text-sm" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => fetchPostings(offset - limit),
+        disabled: loading || offset === 0,
+        className: "rounded-md border border-border px-3 py-1.5 hover:bg-muted/40 disabled:opacity-50 transition-colors"
+      },
+      "← Previous"
+    ), /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "Page ", page, " of ", totalPages, " · ", result.total, " total"), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: () => fetchPostings(offset + limit),
+        disabled: loading || !result.hasMore,
+        className: "rounded-md border border-border px-3 py-1.5 hover:bg-muted/40 disabled:opacity-50 transition-colors"
+      },
+      "Next →"
+    )))));
+  }
   const TABS = [
     { id: "config", label: "Configuration" },
     { id: "customers", label: "Customers" },
+    { id: "postings", label: "Postings" },
     { id: "events", label: "Events" }
   ];
   function StripePlugin() {
@@ -697,7 +820,7 @@
         className: `px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"}`
       },
       tab.label
-    )))), activeTab === "config" && /* @__PURE__ */ React.createElement(StripeConfigPlugin, null), activeTab === "customers" && /* @__PURE__ */ React.createElement(StripeCustomersPlugin, null), activeTab === "events" && /* @__PURE__ */ React.createElement(StripeEventLogPlugin, null));
+    )))), activeTab === "config" && /* @__PURE__ */ React.createElement(StripeConfigPlugin, null), activeTab === "customers" && /* @__PURE__ */ React.createElement(StripeCustomersPlugin, null), activeTab === "postings" && /* @__PURE__ */ React.createElement(StripePostingPlugin, null), activeTab === "events" && /* @__PURE__ */ React.createElement(StripeEventLogPlugin, null));
   }
   (_a = window.__elementsPlugins) == null ? void 0 : _a.register("stripe", StripePlugin);
 })(window.React);
