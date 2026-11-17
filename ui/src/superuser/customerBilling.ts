@@ -1,6 +1,6 @@
 import React from 'react'
 import { sessionHeaders } from './api'
-import { usageRangeParams, sumUsage, type Mode, type MeterSummary } from './stripeMode'
+import { USAGE_DAYS, usageRangeParams, sumUsage, type Mode, type MeterSummary } from './stripeMode'
 
 export interface ChargeSummary {
   id: string
@@ -79,7 +79,7 @@ export interface MeterUsageSummary {
  * are warned to the console). `upcoming` is the string 'none' when the customer has nothing
  * pending (the API answers 204).
  */
-export function useCustomerBilling(customerId: string, mode: Mode, meters: MeterSummary[]) {
+export function useCustomerBilling(customerId: string, mode: Mode, meters: MeterSummary[], usageDays: number = USAGE_DAYS) {
   const [loading, setLoading] = React.useState(true)
   const [paymentMethods, setPaymentMethods] = React.useState<PaymentMethodSummary[] | null>(null)
   const [upcoming, setUpcoming] = React.useState<UpcomingInvoiceSummary | 'none' | null>(null)
@@ -106,13 +106,14 @@ export function useCustomerBilling(customerId: string, mode: Mode, meters: Meter
         return res.json()
       }
 
-      // Hourly buckets so usage can be broken down per day.
+      // Hourly buckets so usage can be broken down per day. Hour-bucketed windows stay within
+      // the element's 1000-summary page cap up to ~41 days.
       async function fetchUsage(): Promise<Record<string, MeterUsageSummary[] | 'error'>> {
         const result: Record<string, MeterUsageSummary[] | 'error'> = {}
         await Promise.all(meters.map(async m => {
           try {
             const res = await fetch(
-              `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${enc}${usageRangeParams()}&window=hour`,
+              `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${enc}${usageRangeParams(usageDays)}&window=hour`,
               { credentials: 'include', headers })
             result[m.eventName] = res.ok ? await res.json() : 'error'
           } catch {
@@ -145,7 +146,7 @@ export function useCustomerBilling(customerId: string, mode: Mode, meters: Meter
     }
     load()
     return () => { cancelled = true }
-  }, [customerId, mode, meters])
+  }, [customerId, mode, meters, usageDays])
 
   // Per-meter totals keyed by local day: eventName -> dayKey -> summed usage.
   const usageByDay = React.useMemo(() => {

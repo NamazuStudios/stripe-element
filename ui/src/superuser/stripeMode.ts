@@ -28,10 +28,10 @@ export function formatMoney(amount: number | null | undefined, currency: string 
   }
 }
 
-/** ISO-8601 start/end params for the trailing usage window (minute-aligned). */
-export function usageRangeParams(): string {
+/** ISO-8601 start/end params for a trailing usage window of {@code days} days (minute-aligned). */
+export function usageRangeParams(days: number = USAGE_DAYS): string {
   const end = new Date()
-  const start = new Date(end.getTime() - USAGE_DAYS * 24 * 3600 * 1000)
+  const start = new Date(end.getTime() - days * 24 * 3600 * 1000)
   const floor = (d: Date) => d.toISOString().slice(0, 17) + '00Z'
   return `&start=${floor(start)}&end=${floor(end)}`
 }

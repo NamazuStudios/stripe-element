@@ -37,9 +37,11 @@ export function StripeCustomersPlugin() {
   const [lookupId, setLookupId] = React.useState('')
 
   // "With usage only" filter: fan out per-customer usage totals client-side (Stripe's API can
-  // only answer usage per customer, so there's no server-side filter). customerId -> week total,
-  // null while that customer is still being summed.
+  // only answer usage per customer, so there's no server-side filter). Uses Stripe's
+  // single-aggregate response (no hour bucketing) — one request per customer-meter regardless
+  // of window size. customerId -> week total, null while that customer is still being summed.
   const [usageOnly, setUsageOnly] = React.useState(false)
+  const [usageWindowDays, setUsageWindowDays] = React.useState(7)
   const [usageTotals, setUsageTotals] = React.useState<Record<string, number | null>>({})
 
   // Cursor pagination: cursorStack[i] is the cursor page i+1 was fetched with (page 1 uses
@@ -80,18 +82,18 @@ export function StripeCustomersPlugin() {
 
   React.useEffect(() => { fetchCustomers(mode, null, []) }, [mode])
 
-  // Resolve the "with usage only" filter whenever it is on and the customer page changes.
+  // Resolve the "with usage only" filter whenever it or the window changes, and whenever the
+  // customer page changes.
   React.useEffect(() => {
     if (!usageOnly || !customers?.length) return
     let cancelled = false
     async function run() {
       const headers = { ...sessionHeaders(), 'X-Stripe-Mode': mode }
-      for (const c of customers ?? []) {
-        if (cancelled) return
+      await Promise.all((customers ?? []).map(async c => {
         try {
           let total = 0
           const results = await Promise.all(meters.map(m => fetch(
-            `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams()}`,
+            `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams(usageWindowDays)}`,
             { credentials: 'include', headers })))
           for (const res of results) {
             if (res.ok) total += sumUsage(await res.json())
@@ -100,11 +102,11 @@ export function StripeCustomersPlugin() {
         } catch {
           if (!cancelled) setUsageTotals(prev => ({ ...prev, [c.id]: null }))
         }
-      }
+      }))
     }
     run()
     return () => { cancelled = true }
-  }, [usageOnly, customers, meters, mode])
+  }, [usageOnly, usageWindowDays, customers, meters, mode])
 
   const filteredCustomers = usageOnly
     ? (customers ?? []).filter(c => (usageTotals[c.id] ?? 0) > 0)
@@ -180,6 +182,21 @@ export function StripeCustomersPlugin() {
               : 'With usage only'}
           </label>
         </div>
+        {usageOnly && (
+          <div className="space-y-1.5">
+            <label htmlFor="customers-usage-window" className="block text-sm font-medium">Usage window</label>
+            <select
+              id="customers-usage-window"
+              value={usageWindowDays}
+              onChange={e => setUsageWindowDays(Number(e.target.value))}
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value={7}>Trailing 7 days</option>
+              <option value={14}>Trailing 14 days</option>
+              <option value={30}>Trailing 30 days</option>
+            </select>
+          </div>
+        )}
         <form
           className="space-y-1.5"
           onSubmit={e => {
@@ -322,7 +339,8 @@ function CustomerDetailView({ customerId, fallbackName, mode, onBack }: {
   onBack: () => void
 }) {
   const [meters, setMeters] = React.useState<MeterSummary[]>([])
-  const billing = useCustomerBilling(customerId, mode, meters)
+  const [usageDays, setUsageDays] = React.useState(USAGE_DAYS)
+  const billing = useCustomerBilling(customerId, mode, meters, usageDays)
 
   React.useEffect(() => {
     fetch('/element/stripe/api/stripe/meters?active=true&limit=100', {
@@ -408,16 +426,28 @@ function CustomerDetailView({ customerId, fallbackName, mode, onBack }: {
           </p>
         </div>
         <div className="rounded-md border border-border p-3">
-          <p className="text-xs text-muted-foreground mb-1">Metered usage, last {USAGE_DAYS} days</p>
+          <p className="text-xs text-muted-foreground mb-1">Metered usage, last {usageDays} days</p>
           <p className="text-sm font-medium">{billing.loading ? '—' : formatUsage(weekTotal)}</p>
         </div>
       </div>
 
       {/* Usage by day */}
       <div className="mb-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-          Metered usage by day (Stripe aggregates; local days)
-        </h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Metered usage by day (Stripe aggregates; local days)
+          </h2>
+          <select
+            value={usageDays}
+            onChange={e => setUsageDays(Number(e.target.value))}
+            aria-label="Usage window"
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value={7}>Trailing 7 days</option>
+            <option value={14}>Trailing 14 days</option>
+            <option value={30}>Trailing 30 days</option>
+          </select>
+        </div>
         {meters.length === 0 ? (
           <p className="text-sm text-muted-foreground">No active meters on this account.</p>
         ) : !hasUsage ? (

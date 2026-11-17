@@ -177,16 +177,16 @@
       return `${amount / 100} ${currency ?? ""}`;
     }
   }
-  function usageRangeParams() {
+  function usageRangeParams(days = USAGE_DAYS) {
     const end = /* @__PURE__ */ new Date();
-    const start = new Date(end.getTime() - USAGE_DAYS * 24 * 3600 * 1e3);
+    const start = new Date(end.getTime() - days * 24 * 3600 * 1e3);
     const floor = (d) => d.toISOString().slice(0, 17) + "00Z";
     return `&start=${floor(start)}&end=${floor(end)}`;
   }
   function sumUsage(events) {
     return events.reduce((sum, e) => sum + parseFloat(e.aggregatedValue ?? "0"), 0);
   }
-  function useCustomerBilling(customerId, mode, meters) {
+  function useCustomerBilling(customerId, mode, meters, usageDays = USAGE_DAYS) {
     const [loading, setLoading] = React.useState(true);
     const [paymentMethods, setPaymentMethods] = React.useState(null);
     const [upcoming, setUpcoming] = React.useState(null);
@@ -215,7 +215,7 @@
           await Promise.all(meters.map(async (m) => {
             try {
               const res = await fetch(
-                `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${enc}${usageRangeParams()}&window=hour`,
+                `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${enc}${usageRangeParams(usageDays)}&window=hour`,
                 { credentials: "include", headers }
               );
               result[m.eventName] = res.ok ? await res.json() : "error";
@@ -248,7 +248,7 @@
       return () => {
         cancelled = true;
       };
-    }, [customerId, mode, meters]);
+    }, [customerId, mode, meters, usageDays]);
     const usageByDay = React.useMemo(() => {
       const map = {};
       for (const [event, events] of Object.entries(usage)) {
@@ -341,6 +341,7 @@
     const [selected, setSelected] = React.useState(null);
     const [lookupId, setLookupId] = React.useState("");
     const [usageOnly, setUsageOnly] = React.useState(false);
+    const [usageWindowDays, setUsageWindowDays] = React.useState(7);
     const [usageTotals, setUsageTotals] = React.useState({});
     const [cursorStack, setCursorStack] = React.useState([]);
     const [hasMore, setHasMore] = React.useState(false);
@@ -380,12 +381,11 @@
       let cancelled = false;
       async function run() {
         const headers = { ...sessionHeaders(), "X-Stripe-Mode": mode };
-        for (const c of customers ?? []) {
-          if (cancelled) return;
+        await Promise.all((customers ?? []).map(async (c) => {
           try {
             let total = 0;
             const results = await Promise.all(meters.map((m) => fetch(
-              `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams()}`,
+              `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams(usageWindowDays)}`,
               { credentials: "include", headers }
             )));
             for (const res of results) {
@@ -395,13 +395,13 @@
           } catch {
             if (!cancelled) setUsageTotals((prev) => ({ ...prev, [c.id]: null }));
           }
-        }
+        }));
       }
       run();
       return () => {
         cancelled = true;
       };
-    }, [usageOnly, customers, meters, mode]);
+    }, [usageOnly, usageWindowDays, customers, meters, mode]);
     const filteredCustomers = usageOnly ? (customers ?? []).filter((c) => (usageTotals[c.id] ?? 0) > 0) : customers ?? [];
     const usageFilterSettled = !usageOnly || filteredCustomers.length > 0 || (customers ?? []).every((c) => usageTotals[c.id] !== void 0);
     const livemodeMismatch = (customers ?? []).length > 0 && (mode === "production" ? customers.some((c) => !c.livemode) : customers.some((c) => c.livemode));
@@ -448,7 +448,18 @@
         onChange: (e) => setUsageOnly(e.target.checked),
         className: "accent-primary"
       }
-    ), usageOnly && Object.keys(usageTotals).length > 0 && usageFilterSettled ? `With usage only (${filteredCustomers.length})` : "With usage only")), /* @__PURE__ */ React.createElement(
+    ), usageOnly && Object.keys(usageTotals).length > 0 && usageFilterSettled ? `With usage only (${filteredCustomers.length})` : "With usage only")), usageOnly && /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { htmlFor: "customers-usage-window", className: "block text-sm font-medium" }, "Usage window"), /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        id: "customers-usage-window",
+        value: usageWindowDays,
+        onChange: (e) => setUsageWindowDays(Number(e.target.value)),
+        className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      },
+      /* @__PURE__ */ React.createElement("option", { value: 7 }, "Trailing 7 days"),
+      /* @__PURE__ */ React.createElement("option", { value: 14 }, "Trailing 14 days"),
+      /* @__PURE__ */ React.createElement("option", { value: 30 }, "Trailing 30 days")
+    )), /* @__PURE__ */ React.createElement(
       "form",
       {
         className: "space-y-1.5",
@@ -531,7 +542,8 @@
   }
   function CustomerDetailView({ customerId, fallbackName, mode, onBack }) {
     const [meters, setMeters] = React.useState([]);
-    const billing = useCustomerBilling(customerId, mode, meters);
+    const [usageDays, setUsageDays] = React.useState(USAGE_DAYS);
+    const billing = useCustomerBilling(customerId, mode, meters, usageDays);
     React.useEffect(() => {
       fetch("/element/stripe/api/stripe/meters?active=true&limit=100", {
         credentials: "include",
@@ -571,7 +583,18 @@
         className: "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 transition-colors"
       },
       "Portal Link"
-    )), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-mono text-muted-foreground mb-4" }, customerId, " · ", mode === "production" ? "production (live)" : "sandbox (test)", " ·", " ", /* @__PURE__ */ React.createElement("a", { href: stripeDashboardUrl(mode, `/customers/${customerId}`), target: "_blank", rel: "noreferrer", className: "text-primary hover:underline" }, "Stripe Dashboard ↗"), " · ", /* @__PURE__ */ React.createElement("a", { href: stripeDashboardUrl(mode, "/billing/meters"), target: "_blank", rel: "noreferrer", className: "text-primary hover:underline" }, "Meters ↗")), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mb-1" }, "Payment method"), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, billing.loading || billing.paymentMethods === null ? "—" : onFile ?? "None on file")), /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mb-1" }, "Upcoming invoice"), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, billing.loading || billing.upcoming === null ? "—" : billing.upcoming === "none" ? "Nothing scheduled" : `${formatMoney(billing.upcoming.total, billing.upcoming.currency)} · due ${billing.upcoming.periodEnd ? new Date(billing.upcoming.periodEnd).toLocaleDateString() : "—"}`)), /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mb-1" }, "Metered usage, last ", USAGE_DAYS, " days"), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, billing.loading ? "—" : formatUsage(weekTotal)))), /* @__PURE__ */ React.createElement("div", { className: "mb-6" }, /* @__PURE__ */ React.createElement("h2", { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2" }, "Metered usage by day (Stripe aggregates; local days)"), meters.length === 0 ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No active meters on this account.") : !hasUsage ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No usage recorded for this customer in the window.") : /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto max-w-2xl" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-xs" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40 text-muted-foreground" }, /* @__PURE__ */ React.createElement("th", { className: "px-3 py-2 text-left font-medium" }, "Day"), meters.map((m) => /* @__PURE__ */ React.createElement("th", { key: m.eventName, className: "px-3 py-2 text-right font-mono font-medium" }, m.eventName)), /* @__PURE__ */ React.createElement("th", { className: "px-3 py-2 text-right font-medium" }, "Total"))), /* @__PURE__ */ React.createElement("tbody", null, [...days].reverse().map(({ key, label }) => /* @__PURE__ */ React.createElement("tr", { key }, /* @__PURE__ */ React.createElement("td", { className: "px-3 py-1 text-muted-foreground" }, label), meters.map((m) => {
+    )), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-mono text-muted-foreground mb-4" }, customerId, " · ", mode === "production" ? "production (live)" : "sandbox (test)", " ·", " ", /* @__PURE__ */ React.createElement("a", { href: stripeDashboardUrl(mode, `/customers/${customerId}`), target: "_blank", rel: "noreferrer", className: "text-primary hover:underline" }, "Stripe Dashboard ↗"), " · ", /* @__PURE__ */ React.createElement("a", { href: stripeDashboardUrl(mode, "/billing/meters"), target: "_blank", rel: "noreferrer", className: "text-primary hover:underline" }, "Meters ↗")), /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mb-1" }, "Payment method"), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, billing.loading || billing.paymentMethods === null ? "—" : onFile ?? "None on file")), /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mb-1" }, "Upcoming invoice"), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, billing.loading || billing.upcoming === null ? "—" : billing.upcoming === "none" ? "Nothing scheduled" : `${formatMoney(billing.upcoming.total, billing.upcoming.currency)} · due ${billing.upcoming.periodEnd ? new Date(billing.upcoming.periodEnd).toLocaleDateString() : "—"}`)), /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mb-1" }, "Metered usage, last ", usageDays, " days"), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, billing.loading ? "—" : formatUsage(weekTotal)))), /* @__PURE__ */ React.createElement("div", { className: "mb-6" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between mb-2" }, /* @__PURE__ */ React.createElement("h2", { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Metered usage by day (Stripe aggregates; local days)"), /* @__PURE__ */ React.createElement(
+      "select",
+      {
+        value: usageDays,
+        onChange: (e) => setUsageDays(Number(e.target.value)),
+        "aria-label": "Usage window",
+        className: "rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      },
+      /* @__PURE__ */ React.createElement("option", { value: 7 }, "Trailing 7 days"),
+      /* @__PURE__ */ React.createElement("option", { value: 14 }, "Trailing 14 days"),
+      /* @__PURE__ */ React.createElement("option", { value: 30 }, "Trailing 30 days")
+    )), meters.length === 0 ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No active meters on this account.") : !hasUsage ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No usage recorded for this customer in the window.") : /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto max-w-2xl" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-xs" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40 text-muted-foreground" }, /* @__PURE__ */ React.createElement("th", { className: "px-3 py-2 text-left font-medium" }, "Day"), meters.map((m) => /* @__PURE__ */ React.createElement("th", { key: m.eventName, className: "px-3 py-2 text-right font-mono font-medium" }, m.eventName)), /* @__PURE__ */ React.createElement("th", { className: "px-3 py-2 text-right font-medium" }, "Total"))), /* @__PURE__ */ React.createElement("tbody", null, [...days].reverse().map(({ key, label }) => /* @__PURE__ */ React.createElement("tr", { key }, /* @__PURE__ */ React.createElement("td", { className: "px-3 py-1 text-muted-foreground" }, label), meters.map((m) => {
       var _a2;
       const value = ((_a2 = billing.usageByDay[m.eventName]) == null ? void 0 : _a2[key]) ?? 0;
       return /* @__PURE__ */ React.createElement("td", { key: m.eventName, className: `px-3 py-1 text-right font-mono ${value !== 0 ? "font-medium text-foreground" : "text-muted-foreground/50"}` }, billing.usage[m.eventName] === "error" ? /* @__PURE__ */ React.createElement("span", { className: "text-destructive" }, "err") : formatUsage(value));
