@@ -35,6 +35,7 @@ export function StripeCustomersPlugin() {
   const [copied, setCopied] = React.useState<string | null>(null)
   const [selected, setSelected] = React.useState<CustomerSummary | null>(null)
   const [lookupId, setLookupId] = React.useState('')
+  const [search, setSearch] = React.useState('')
 
   // Cursor pagination: cursorStack[i] is the cursor page i+1 was fetched with (page 1 uses
   // no cursor), so Previous can walk back and Refresh can reload the current page.
@@ -75,6 +76,16 @@ export function StripeCustomersPlugin() {
 
   // Mode/data sanity: a production selection returning test-mode customers means the
   // production key for this deployment is a test key.
+  // Client-side search over the loaded page: name, email, customer ID, and metadata values.
+  const visibleCustomers = (customers ?? []).filter(c => {
+    const q = search.trim().toLowerCase()
+    if (!q) return true
+    return c.id.toLowerCase().includes(q)
+      || (c.name ?? '').toLowerCase().includes(q)
+      || (c.email ?? '').toLowerCase().includes(q)
+      || Object.values(c.metadata).some(v => v.toLowerCase().includes(q))
+  })
+
   const livemodeMismatch = (customers ?? []).length > 0 &&
     (mode === 'production' ? customers!.some(c => !c.livemode) : customers!.some(c => c.livemode))
 
@@ -146,6 +157,17 @@ export function StripeCustomersPlugin() {
             className="w-64 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </form>
+        <div className="space-y-1.5 flex-1 min-w-48">
+          <label htmlFor="customers-search" className="block text-sm font-medium">Search</label>
+          <input
+            id="customers-search"
+            type="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Filter by name, email, ID…"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
       </div>
 
       {livemodeMismatch && (
@@ -162,13 +184,13 @@ export function StripeCustomersPlugin() {
         </div>
       )}
 
-      {customers && !loading && customers.length === 0 && (
+      {customers && !loading && visibleCustomers.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No customers exist in {mode} mode yet.
+          {search.trim() ? `No customers match “${search.trim()}”.` : `No customers exist in ${mode} mode yet.`}
         </p>
       )}
 
-      {customers && customers.length > 0 && (
+      {visibleCustomers.length > 0 && (
         <>
           <div className="rounded-md border border-border overflow-x-auto">
             <table className="w-full text-sm table-fixed">
@@ -183,20 +205,27 @@ export function StripeCustomersPlugin() {
                 </tr>
               </thead>
               <tbody>
-                {customers.map((c, i) => (
+                {visibleCustomers.map((c, i) => (
                   <tr
                     key={c.id}
                     onClick={() => setSelected(c)}
                     className={`${i % 2 === 0 ? '' : 'bg-muted/20'} cursor-pointer hover:bg-muted/40 transition-colors`}
                   >
-                    <td className="px-4 py-2 font-mono text-xs" onClick={e => e.stopPropagation()}>
+                    <td className="px-4 py-2 font-mono text-xs">
                       <div className="flex items-center gap-2">
+                        <span className="truncate max-w-[12rem]" title={c.id}>{c.id}</span>
                         <button
-                          onClick={() => handleCopy(c.id)}
+                          onClick={e => {
+                            e.stopPropagation()
+                            navigator.clipboard.writeText(c.id).then(() => {
+                              setCopied(c.id)
+                              setTimeout(() => setCopied(null), 2000)
+                            })
+                          }}
                           title="Copy customer ID"
-                          className="truncate max-w-[12rem] text-left hover:underline"
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
                         >
-                          {c.id}
+                          copy
                         </button>
                         <span className="w-14 shrink-0 text-[10px] text-green-600">
                           {copied === c.id ? 'copied!' : ''}
@@ -215,7 +244,7 @@ export function StripeCustomersPlugin() {
                         rel="noreferrer"
                         className="text-primary hover:underline"
                       >
-                        Dashboard ↗
+                        Dashboard
                       </a>
                       <span className="mx-1 text-muted-foreground">·</span>
                       <a
@@ -224,7 +253,7 @@ export function StripeCustomersPlugin() {
                         rel="noreferrer"
                         className="text-primary hover:underline"
                       >
-                        Meters ↗
+                        Meters
                       </a>
                     </td>
                     <td className="px-4 py-2 text-right text-xs text-muted-foreground">Details →</td>
@@ -271,14 +300,16 @@ function CustomerDetailView({ customerId, fallbackName, mode, onBack }: {
   onBack: () => void
 }) {
   const [meters, setMeters] = React.useState<MeterSummary[]>([])
+  const [metersLoading, setMetersLoading] = React.useState(true)
   const [usageDays, setUsageDays] = React.useState(USAGE_DAYS)
   const billing = useCustomerBilling(customerId, mode, meters, usageDays)
 
   React.useEffect(() => {
+    setMetersLoading(true)
     fetch('/element/stripe/api/stripe/meters?active=true&limit=100', {
       credentials: 'include',
       headers: { ...sessionHeaders(), 'X-Stripe-Mode': mode },
-    }).then(res => res.ok ? res.json() : []).then(setMeters).catch(() => setMeters([]))
+    }).then(res => res.ok ? res.json() : []).then(m => { setMeters(m); setMetersLoading(false) }).catch(() => { setMeters([]); setMetersLoading(false) })
   }, [mode])
 
   const days = React.useMemo(() => {
@@ -320,6 +351,13 @@ function CustomerDetailView({ customerId, fallbackName, mode, onBack }: {
         ← All customers
       </button>
 
+      {billing.loading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4" role="status" aria-live="polite">
+          <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+          Loading billing data…
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-bold">{fallbackName}</h1>
         <button
@@ -332,15 +370,15 @@ function CustomerDetailView({ customerId, fallbackName, mode, onBack }: {
       <p className="text-sm font-mono text-muted-foreground mb-4">
         {customerId} · {mode === 'production' ? 'production (live)' : 'sandbox (test)'} ·{' '}
         <a href={stripeDashboardUrl(mode, `/customers/${customerId}`)} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-          Stripe Dashboard ↗
+          Stripe Dashboard
         </a>{' · '}
         <a href={stripeDashboardUrl(mode, '/billing/meters')} target="_blank" rel="noreferrer" className="text-primary hover:underline">
-          Meters ↗
+          Meters
         </a>
       </p>
 
       {/* Summary strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6 ${billing.loading ? 'animate-pulse' : ''}`}>
         <div className="rounded-md border border-border p-3">
           <p className="text-xs text-muted-foreground mb-1">Payment method</p>
           <p className="text-sm font-medium">
@@ -380,7 +418,9 @@ function CustomerDetailView({ customerId, fallbackName, mode, onBack }: {
             <option value={30}>Trailing 30 days</option>
           </select>
         </div>
-        {meters.length === 0 ? (
+        {metersLoading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : meters.length === 0 ? (
           <p className="text-sm text-muted-foreground">No active meters on this account.</p>
         ) : !hasUsage ? (
           <p className="text-sm text-muted-foreground">No usage recorded for this customer in the window.</p>
@@ -438,7 +478,7 @@ function CustomerBillingTables({ billing }: {
       {/* Charges */}
       <div className="mb-6">
         <SectionHeading>Charges (one-time purchases)</SectionHeading>
-        <DataTable empty={billing.charges !== null && billing.charges.length === 0 ? 'No charges.' : null} failed={billing.charges === null}>
+        <DataTable empty={billing.charges !== null && billing.charges.length === 0 ? 'No charges.' : null} loading={billing.charges === null && billing.loading} failed={billing.charges === null && !billing.loading}>
           {billing.charges?.map((ch, i) => (
             <tr key={ch.id} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
               <td className="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">
@@ -457,7 +497,7 @@ function CustomerBillingTables({ billing }: {
               <td className="px-4 py-2 font-mono text-xs">{ch.id}</td>
               <td className="px-4 py-2 text-xs">
                 {ch.receiptUrl
-                  ? <a href={ch.receiptUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">Receipt ↗</a>
+                  ? <a href={ch.receiptUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">Receipt</a>
                   : '—'}
               </td>
             </tr>
@@ -468,7 +508,7 @@ function CustomerBillingTables({ billing }: {
       {/* Invoices */}
       <div className="mb-6">
         <SectionHeading>Invoices</SectionHeading>
-        <DataTable empty={billing.invoices !== null && billing.invoices.length === 0 ? 'No invoices.' : null} failed={billing.invoices === null}>
+        <DataTable empty={billing.invoices !== null && billing.invoices.length === 0 ? 'No invoices.' : null} loading={billing.invoices === null && billing.loading} failed={billing.invoices === null && !billing.loading}>
           {billing.invoices?.map((inv, i) => (
             <tr key={inv.id} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
               <td className="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">{new Date(inv.created).toLocaleDateString()}</td>
@@ -483,7 +523,7 @@ function CustomerBillingTables({ billing }: {
       {/* Payment attempts */}
       <div className="mb-6">
         <SectionHeading>Payment attempts</SectionHeading>
-        <DataTable empty={billing.intents !== null && billing.intents.length === 0 ? 'No PaymentIntents.' : null} failed={billing.intents === null}>
+        <DataTable empty={billing.intents !== null && billing.intents.length === 0 ? 'No PaymentIntents.' : null} loading={billing.intents === null && billing.loading} failed={billing.intents === null && !billing.loading}>
           {billing.intents?.map((pi, i) => (
             <tr key={pi.id} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
               <td className="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">
@@ -502,7 +542,7 @@ function CustomerBillingTables({ billing }: {
       {/* Subscriptions */}
       <div>
         <SectionHeading>Subscriptions</SectionHeading>
-        <DataTable empty={billing.subscriptions !== null && billing.subscriptions.length === 0 ? 'No subscriptions.' : null} failed={billing.subscriptions === null}>
+        <DataTable empty={billing.subscriptions !== null && billing.subscriptions.length === 0 ? 'No subscriptions.' : null} loading={billing.subscriptions === null && billing.loading} failed={billing.subscriptions === null && !billing.loading}>
           {billing.subscriptions?.map((s, i) => (
             <tr key={s.subscriptionId} className={i % 2 === 0 ? '' : 'bg-muted/20'}>
               <td className="px-4 py-2 font-mono text-xs">{s.subscriptionId}</td>
@@ -532,12 +572,14 @@ function Badge({ value, styles }: { value: string | null, styles: Record<string,
   )
 }
 
-function DataTable({ children, empty, failed, headers }: {
+function DataTable({ children, empty, failed, loading, headers }: {
   children: React.ReactNode
   empty: string | null
   failed: boolean
+  loading?: boolean
   headers?: string[]
 }) {
+  if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>
   if (failed) return <p className="text-sm text-muted-foreground">Failed to load.</p>
   if (empty) return <p className="text-sm text-muted-foreground">{empty}</p>
   return (
