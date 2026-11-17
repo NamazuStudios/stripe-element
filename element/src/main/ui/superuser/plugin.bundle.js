@@ -217,7 +217,12 @@
       const enc = encodeURIComponent(id.trim());
       async function getJson(path) {
         const res = await fetch(path, { credentials: "include", headers });
-        return res.ok ? res.json() : null;
+        if (res.status === 204) return null;
+        if (!res.ok) {
+          console.warn(`GET ${path} failed: ${res.status} ${res.statusText}`);
+          return null;
+        }
+        return res.json();
       }
       async function fetchUsage() {
         const meters = await getJson("/element/stripe/api/stripe/meters?active=true&limit=100");

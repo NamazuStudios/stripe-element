@@ -153,7 +153,12 @@ export function StripeBillingPlugin() {
 
     async function getJson<T>(path: string): Promise<T | null> {
       const res = await fetch(path, { credentials: 'include', headers })
-      return res.ok ? res.json() : null
+      if (res.status === 204) return null // e.g. upcoming-invoice: nothing scheduled
+      if (!res.ok) {
+        console.warn(`GET ${path} failed: ${res.status} ${res.statusText}`)
+        return null
+      }
+      return res.json()
     }
 
     // Usage totals per meter for the trailing window.
