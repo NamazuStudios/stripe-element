@@ -36,15 +36,6 @@ export function StripeCustomersPlugin() {
   const [selected, setSelected] = React.useState<CustomerSummary | null>(null)
   const [lookupId, setLookupId] = React.useState('')
 
-  // "With usage only" filter: one request to the element's cached rollup endpoint (the element
-  // fans out to Stripe server-side with bounded concurrency). customerId -> trailing-window
-  // total; null = unknown (that customer's aggregates could not be fetched).
-  const [usageOnly, setUsageOnly] = React.useState(false)
-  const [usageWindowDays, setUsageWindowDays] = React.useState(7)
-  const [usageTotals, setUsageTotals] = React.useState<Record<string, number | null>>({})
-  const [usageRollupKey, setUsageRollupKey] = React.useState(0)
-  const [usageRollupError, setUsageRollupError] = React.useState(false)
-
   // Cursor pagination: cursorStack[i] is the cursor page i+1 was fetched with (page 1 uses
   // no cursor), so Previous can walk back and Refresh can reload the current page.
   const [cursorStack, setCursorStack] = React.useState<string[]>([])
@@ -65,7 +56,6 @@ export function StripeCustomersPlugin() {
       setCustomers(data.customers)
       setHasMore(data.hasMore)
       setCursorStack(nextStack)
-      setUsageTotals({})
 
       const metersRes = await fetch('/element/stripe/api/stripe/meters?active=true&limit=100', {
         credentials: 'include',
@@ -82,37 +72,6 @@ export function StripeCustomersPlugin() {
   const currentCursor = cursorStack.length ? cursorStack[cursorStack.length - 1] : null
 
   React.useEffect(() => { fetchCustomers(mode, null, []) }, [mode])
-
-  // Resolve the "with usage only" filter from the element's cached rollup.
-  React.useEffect(() => {
-    if (!usageOnly) return
-    let cancelled = false
-    setUsageRollupError(false)
-    setUsageTotals({})
-    ;(async () => {
-      try {
-        const res = await fetch(`/element/stripe/api/stripe/customers/usage?window=${usageWindowDays}${usageRollupKey > 0 ? '&refresh=true' : ''}`, {
-          credentials: 'include',
-          headers: { ...sessionHeaders(), 'X-Stripe-Mode': mode },
-        })
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-        const rollup: { totals: { customerId: string; total: string | null }[] } = await res.json()
-        if (cancelled) return
-        setUsageTotals(Object.fromEntries(rollup.totals.map(t => [t.customerId, t.total != null ? parseFloat(t.total) : null])))
-      } catch (e) {
-        if (!cancelled) {
-          console.warn('usage rollup failed', e)
-          setUsageRollupError(true)
-        }
-      }
-    })()
-    return () => { cancelled = true }
-  }, [usageOnly, usageWindowDays, usageRollupKey, customers, mode])
-
-  const filteredCustomers = usageOnly && !usageRollupError
-    ? (customers ?? []).filter(c => (usageTotals[c.id] ?? 0) > 0)
-    : (customers ?? [])
-  const usageFilterSettled = !usageOnly || usageRollupError || Object.keys(usageTotals).length > 0
 
   // Mode/data sanity: a production selection returning test-mode customers means the
   // production key for this deployment is a test key.
@@ -143,7 +102,6 @@ export function StripeCustomersPlugin() {
         <h1 className="text-2xl font-bold">Customers</h1>
         <button
           onClick={() => {
-            if (usageOnly) setUsageRollupKey(k => k + 1) // bypass the rollup cache
             fetchCustomers(mode, currentCursor, cursorStack)
           }}
           disabled={loading}
@@ -155,7 +113,8 @@ export function StripeCustomersPlugin() {
       <p className="text-sm text-muted-foreground mb-4">
         Every customer on this Stripe account in the selected mode — each one is billing-enabled there.
         Click a row for its full billing view: metered usage, charges, invoices, payment attempts,
-        subscriptions, and its posting ledger.
+        subscriptions, and its posting ledger. The Stripe dashboard remains the source of truth for
+        usage and billing data — every view links out to it.
       </p>
 
       <div className="flex flex-wrap gap-3 mb-4 items-end">
@@ -170,38 +129,6 @@ export function StripeCustomersPlugin() {
             {MODES.map(m => <option key={m} value={m}>{m === 'production' ? 'Production (live)' : 'Sandbox (test)'}</option>)}
           </select>
         </div>
-        <div className="space-y-1.5">
-          <label htmlFor="customers-usage-only" className="block text-sm font-medium">Filter</label>
-          <label htmlFor="customers-usage-only" className="flex items-center gap-2 h-10 px-3 rounded-md border border-border bg-background text-sm cursor-pointer">
-            <input
-              id="customers-usage-only"
-              type="checkbox"
-              checked={usageOnly}
-              onChange={e => setUsageOnly(e.target.checked)}
-              className="accent-primary"
-            />
-            {usageOnly
-              ? usageFilterSettled
-                ? `With usage only (${filteredCustomers.length})`
-                : `With usage only — summing ${Object.keys(usageTotals).length}/${customers?.length ?? 0}…`
-              : 'With usage only'}
-          </label>
-        </div>
-        {usageOnly && (
-          <div className="space-y-1.5">
-            <label htmlFor="customers-usage-window" className="block text-sm font-medium">Usage window</label>
-            <select
-              id="customers-usage-window"
-              value={usageWindowDays}
-              onChange={e => setUsageWindowDays(Number(e.target.value))}
-              className="rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            >
-              <option value={7}>Trailing 7 days</option>
-              <option value={14}>Trailing 14 days</option>
-              <option value={30}>Trailing 30 days</option>
-            </select>
-          </div>
-        )}
         <form
           className="space-y-1.5"
           onSubmit={e => {
@@ -229,25 +156,19 @@ export function StripeCustomersPlugin() {
         </div>
       )}
 
-      {usageOnly && usageRollupError && (
-        <div className="rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4">
-          Usage totals are unavailable right now — showing all customers. Try Refresh.
-        </div>
-      )}
-
       {error && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4">
           {error}
         </div>
       )}
 
-      {customers && !loading && filteredCustomers.length === 0 && usageFilterSettled && (
+      {customers && !loading && customers.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          {usageOnly ? 'No customers with metered usage in the trailing window.' : `No customers exist in ${mode} mode yet.`}
+          No customers exist in {mode} mode yet.
         </p>
       )}
 
-      {filteredCustomers.length > 0 && (
+      {customers && customers.length > 0 && (
         <>
           <div className="rounded-md border border-border overflow-x-auto">
             <table className="w-full text-sm table-fixed">
@@ -262,7 +183,7 @@ export function StripeCustomersPlugin() {
                 </tr>
               </thead>
               <tbody>
-                {filteredCustomers.map((c, i) => (
+                {customers.map((c, i) => (
                   <tr
                     key={c.id}
                     onClick={() => setSelected(c)}

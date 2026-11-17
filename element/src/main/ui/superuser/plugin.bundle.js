@@ -340,11 +340,6 @@
     const [copied, setCopied] = React.useState(null);
     const [selected, setSelected] = React.useState(null);
     const [lookupId, setLookupId] = React.useState("");
-    const [usageOnly, setUsageOnly] = React.useState(false);
-    const [usageWindowDays, setUsageWindowDays] = React.useState(7);
-    const [usageTotals, setUsageTotals] = React.useState({});
-    const [usageRollupKey, setUsageRollupKey] = React.useState(0);
-    const [usageRollupError, setUsageRollupError] = React.useState(false);
     const [cursorStack, setCursorStack] = React.useState([]);
     const [hasMore, setHasMore] = React.useState(false);
     async function fetchCustomers(selectedMode, startingAfter, nextStack) {
@@ -362,7 +357,6 @@
         setCustomers(data.customers);
         setHasMore(data.hasMore);
         setCursorStack(nextStack);
-        setUsageTotals({});
         const metersRes = await fetch("/element/stripe/api/stripe/meters?active=true&limit=100", {
           credentials: "include",
           headers: { ...sessionHeaders(), "X-Stripe-Mode": selectedMode }
@@ -378,34 +372,6 @@
     React.useEffect(() => {
       fetchCustomers(mode, null, []);
     }, [mode]);
-    React.useEffect(() => {
-      if (!usageOnly) return;
-      let cancelled = false;
-      setUsageRollupError(false);
-      setUsageTotals({});
-      (async () => {
-        try {
-          const res = await fetch(`/element/stripe/api/stripe/customers/usage?window=${usageWindowDays}${usageRollupKey > 0 ? "&refresh=true" : ""}`, {
-            credentials: "include",
-            headers: { ...sessionHeaders(), "X-Stripe-Mode": mode }
-          });
-          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-          const rollup = await res.json();
-          if (cancelled) return;
-          setUsageTotals(Object.fromEntries(rollup.totals.map((t) => [t.customerId, t.total != null ? parseFloat(t.total) : null])));
-        } catch (e) {
-          if (!cancelled) {
-            console.warn("usage rollup failed", e);
-            setUsageRollupError(true);
-          }
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [usageOnly, usageWindowDays, usageRollupKey, customers, mode]);
-    const filteredCustomers = usageOnly && !usageRollupError ? (customers ?? []).filter((c) => (usageTotals[c.id] ?? 0) > 0) : customers ?? [];
-    const usageFilterSettled = !usageOnly || usageRollupError || Object.keys(usageTotals).length > 0;
     const livemodeMismatch = (customers ?? []).length > 0 && (mode === "production" ? customers.some((c) => !c.livemode) : customers.some((c) => c.livemode));
     function handleCopy(id) {
       navigator.clipboard.writeText(id).then(() => {
@@ -428,14 +394,13 @@
       "button",
       {
         onClick: () => {
-          if (usageOnly) setUsageRollupKey((k) => k + 1);
           fetchCustomers(mode, currentCursor, cursorStack);
         },
         disabled: loading,
         className: "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
       },
       loading ? "Refreshing…" : "Refresh"
-    )), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-4" }, "Every customer on this Stripe account in the selected mode — each one is billing-enabled there. Click a row for its full billing view: metered usage, charges, invoices, payment attempts, subscriptions, and its posting ledger."), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3 mb-4 items-end" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { htmlFor: "customers-mode", className: "block text-sm font-medium" }, "Mode"), /* @__PURE__ */ React.createElement(
+    )), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-4" }, "Every customer on this Stripe account in the selected mode — each one is billing-enabled there. Click a row for its full billing view: metered usage, charges, invoices, payment attempts, subscriptions, and its posting ledger. The Stripe dashboard remains the source of truth for usage and billing data — every view links out to it."), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3 mb-4 items-end" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { htmlFor: "customers-mode", className: "block text-sm font-medium" }, "Mode"), /* @__PURE__ */ React.createElement(
       "select",
       {
         id: "customers-mode",
@@ -444,26 +409,6 @@
         className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       },
       MODES.map((m) => /* @__PURE__ */ React.createElement("option", { key: m, value: m }, m === "production" ? "Production (live)" : "Sandbox (test)"))
-    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { htmlFor: "customers-usage-only", className: "block text-sm font-medium" }, "Filter"), /* @__PURE__ */ React.createElement("label", { htmlFor: "customers-usage-only", className: "flex items-center gap-2 h-10 px-3 rounded-md border border-border bg-background text-sm cursor-pointer" }, /* @__PURE__ */ React.createElement(
-      "input",
-      {
-        id: "customers-usage-only",
-        type: "checkbox",
-        checked: usageOnly,
-        onChange: (e) => setUsageOnly(e.target.checked),
-        className: "accent-primary"
-      }
-    ), usageOnly ? usageFilterSettled ? `With usage only (${filteredCustomers.length})` : `With usage only — summing ${Object.keys(usageTotals).length}/${(customers == null ? void 0 : customers.length) ?? 0}…` : "With usage only")), usageOnly && /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { htmlFor: "customers-usage-window", className: "block text-sm font-medium" }, "Usage window"), /* @__PURE__ */ React.createElement(
-      "select",
-      {
-        id: "customers-usage-window",
-        value: usageWindowDays,
-        onChange: (e) => setUsageWindowDays(Number(e.target.value)),
-        className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-      },
-      /* @__PURE__ */ React.createElement("option", { value: 7 }, "Trailing 7 days"),
-      /* @__PURE__ */ React.createElement("option", { value: 14 }, "Trailing 14 days"),
-      /* @__PURE__ */ React.createElement("option", { value: 30 }, "Trailing 30 days")
     )), /* @__PURE__ */ React.createElement(
       "form",
       {
@@ -485,7 +430,7 @@
           className: "w-64 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         }
       )
-    )), livemodeMismatch && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4" }, "The customer data is ", /* @__PURE__ */ React.createElement("strong", null, mode === "production" ? "test-mode" : "live-mode"), " but you are viewing the", " ", /* @__PURE__ */ React.createElement("strong", null, mode), " key — the ", mode, " API key configured for this deployment looks like a", " ", mode === "production" ? "test" : "live", " key. Check the Configuration tab."), usageOnly && usageRollupError && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4" }, "Usage totals are unavailable right now — showing all customers. Try Refresh."), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), customers && !loading && filteredCustomers.length === 0 && usageFilterSettled && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, usageOnly ? "No customers with metered usage in the trailing window." : `No customers exist in ${mode} mode yet.`), filteredCustomers.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm table-fixed" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground w-[18rem]" }, "Customer ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Name"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Email"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Created"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Stripe"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2" }))), /* @__PURE__ */ React.createElement("tbody", null, filteredCustomers.map((c, i) => /* @__PURE__ */ React.createElement(
+    )), livemodeMismatch && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4" }, "The customer data is ", /* @__PURE__ */ React.createElement("strong", null, mode === "production" ? "test-mode" : "live-mode"), " but you are viewing the", " ", /* @__PURE__ */ React.createElement("strong", null, mode), " key — the ", mode, " API key configured for this deployment looks like a", " ", mode === "production" ? "test" : "live", " key. Check the Configuration tab."), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), customers && !loading && customers.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No customers exist in ", mode, " mode yet."), customers && customers.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm table-fixed" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground w-[18rem]" }, "Customer ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Name"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Email"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Created"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Stripe"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2" }))), /* @__PURE__ */ React.createElement("tbody", null, customers.map((c, i) => /* @__PURE__ */ React.createElement(
       "tr",
       {
         key: c.id,
