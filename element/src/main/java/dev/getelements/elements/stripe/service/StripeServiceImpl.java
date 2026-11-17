@@ -91,7 +91,13 @@ public class StripeServiceImpl implements StripeService {
     private static final int CUSTOMER_ROLLUP_CAP = 1000;
 
     /** Concurrent Stripe reads during a usage rollup. */
-    private static final int ROLLUP_PARALLELISM = 8;
+    private static final int ROLLUP_PARALLELISM = 4;
+
+    /** Retry attempts for a rate-limited meter summary fetch within a rollup. */
+    private static final int SUMMARY_RETRY_ATTEMPTS = 4;
+
+    /** Base backoff for rate-limited summary fetches; doubles per attempt. */
+    private static final long SUMMARY_RETRY_BACKOFF_MS = 500;
 
     /** How long a computed usage rollup is reused (keyed by mode + window). */
     private static final long ROLLUP_CACHE_TTL_MS = 60_000;
@@ -731,7 +737,7 @@ public class StripeServiceImpl implements StripeService {
                         .setEndTime(end.getEpochSecond())
                         .setLimit(SUMMARIES_PAGE_LIMIT);
 
-                var page = gateway.listMeterEventSummaries(meter.getId(), builder.build(), mode);
+                var page = fetchMeterEventSummariesWithRetry(meter.getId(), builder.build(), mode);
                 var meterTotal = BigDecimal.ZERO;
                 var hasMore = Boolean.TRUE.equals(page.getHasMore());
                 var cursor = page.getData().isEmpty() ? null : page.getData().getLast().getId();
@@ -744,7 +750,7 @@ public class StripeServiceImpl implements StripeService {
 
                 // Page through long windows (bounded) so totals aren't silently truncated.
                 while (hasMore && cursor != null) {
-                    page = gateway.listMeterEventSummaries(meter.getId(), builder
+                    page = fetchMeterEventSummariesWithRetry(meter.getId(), builder
                             .setStartingAfter(cursor)
                             .build(), mode);
                     for (final var summary : page.getData()) {
@@ -765,6 +771,44 @@ public class StripeServiceImpl implements StripeService {
         }
 
         return new CustomerUsageTotal(customer.id(), unknown ? null : total, byMeter);
+    }
+
+    /**
+     * Fetches one page of meter event summaries, retrying rate-limit rejections with escalating
+     * backoff. The rollup issues many reads in bursts, which trip Stripe's per-account rate
+     * limit (especially in test mode, where it's tightest) — a 429 is expected and recoverable,
+     * so it retries rather than poisoning the customer's total as unknown.
+     */
+    private com.stripe.model.billing.MeterEventSummaryCollection fetchMeterEventSummariesWithRetry(
+            String meterId,
+            MeterEventSummaryListParams params,
+            StripeMode mode) throws StripeException {
+
+        StripeException last = null;
+
+        for (var attempt = 0; attempt < SUMMARY_RETRY_ATTEMPTS; attempt++) {
+            try {
+                return gateway.listMeterEventSummaries(meterId, params, mode);
+            } catch (com.stripe.exception.RateLimitException e) {
+                last = e;
+            } catch (StripeException e) {
+                if (e.getStatusCode() == null || e.getStatusCode() != 429) {
+                    throw e;
+                }
+                last = e;
+            }
+            try {
+                Thread.sleep(SUMMARY_RETRY_BACKOFF_MS * (1L << attempt) + (long) (Math.random() * 250));
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new InternalServerErrorException("Interrupted while retrying meter summary fetch", ie);
+            }
+        }
+
+        if (last != null) {
+            throw last;
+        }
+        throw new InternalServerErrorException("Meter summary fetch failed after retries");
     }
 
     private record CachedRollup(long at, CustomerUsageRollup rollup) {}
