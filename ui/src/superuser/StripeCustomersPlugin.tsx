@@ -201,7 +201,6 @@ export function StripeCustomersPlugin() {
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Email</th>
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Created</th>
                   <th className="px-4 py-2 text-left font-medium text-muted-foreground">Stripe</th>
-                  <th className="px-4 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -211,21 +210,14 @@ export function StripeCustomersPlugin() {
                     onClick={() => setSelected(c)}
                     className={`${i % 2 === 0 ? '' : 'bg-muted/20'} cursor-pointer hover:bg-muted/40 transition-colors`}
                   >
-                    <td className="px-4 py-2 font-mono text-xs">
+                    <td className="px-4 py-2 font-mono text-xs" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
-                        <span className="truncate max-w-[12rem]" title={c.id}>{c.id}</span>
                         <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            navigator.clipboard.writeText(c.id).then(() => {
-                              setCopied(c.id)
-                              setTimeout(() => setCopied(null), 2000)
-                            })
-                          }}
-                          title="Copy customer ID"
-                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleCopy(c.id)}
+                          title="Copy customer ID (click the row to open its billing view)"
+                          className="truncate max-w-[12rem] text-left hover:underline"
                         >
-                          copy
+                          {c.id}
                         </button>
                         <span className="w-14 shrink-0 text-[10px] text-green-600">
                           {copied === c.id ? 'copied!' : ''}
@@ -246,7 +238,7 @@ export function StripeCustomersPlugin() {
                       >
                         Dashboard
                       </a>
-                      <span className="text-muted-foreground" style={{ marginInline: '10px' }}>·</span>
+                      <span className="text-muted-foreground" style={{ marginInline: '6px' }}>·</span>
                       <a
                         href={stripeDashboardUrl(mode, '/billing/meters')}
                         target="_blank"
@@ -256,7 +248,6 @@ export function StripeCustomersPlugin() {
                         Meters
                       </a>
                     </td>
-                    <td className="px-4 py-2 text-right text-xs text-muted-foreground">Details →</td>
                   </tr>
                 ))}
               </tbody>

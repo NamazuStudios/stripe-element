@@ -379,6 +379,12 @@
       return c.id.toLowerCase().includes(q) || (c.name ?? "").toLowerCase().includes(q) || (c.email ?? "").toLowerCase().includes(q) || Object.values(c.metadata).some((v) => v.toLowerCase().includes(q));
     });
     const livemodeMismatch = (customers ?? []).length > 0 && (mode === "production" ? customers.some((c) => !c.livemode) : customers.some((c) => c.livemode));
+    function handleCopy(id) {
+      navigator.clipboard.writeText(id).then(() => {
+        setCopied(id);
+        setTimeout(() => setCopied(null), 2e3);
+      });
+    }
     if (selected) {
       return /* @__PURE__ */ React.createElement(
         CustomerDetailView,
@@ -440,27 +446,21 @@
         placeholder: "Filter by name, email, ID…",
         className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
       }
-    ))), livemodeMismatch && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4" }, "The customer data is ", /* @__PURE__ */ React.createElement("strong", null, mode === "production" ? "test-mode" : "live-mode"), " but you are viewing the", " ", /* @__PURE__ */ React.createElement("strong", null, mode), " key — the ", mode, " API key configured for this deployment looks like a", " ", mode === "production" ? "test" : "live", " key. Check the Configuration tab."), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), customers && !loading && visibleCustomers.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, search.trim() ? `No customers match “${search.trim()}”.` : `No customers exist in ${mode} mode yet.`), visibleCustomers.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm table-fixed" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground w-[18rem]" }, "Customer ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Name"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Email"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Created"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Stripe"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2" }))), /* @__PURE__ */ React.createElement("tbody", null, visibleCustomers.map((c, i) => /* @__PURE__ */ React.createElement(
+    ))), livemodeMismatch && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4" }, "The customer data is ", /* @__PURE__ */ React.createElement("strong", null, mode === "production" ? "test-mode" : "live-mode"), " but you are viewing the", " ", /* @__PURE__ */ React.createElement("strong", null, mode), " key — the ", mode, " API key configured for this deployment looks like a", " ", mode === "production" ? "test" : "live", " key. Check the Configuration tab."), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), customers && !loading && visibleCustomers.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, search.trim() ? `No customers match “${search.trim()}”.` : `No customers exist in ${mode} mode yet.`), visibleCustomers.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm table-fixed" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground w-[18rem]" }, "Customer ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Name"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Email"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Created"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Stripe"))), /* @__PURE__ */ React.createElement("tbody", null, visibleCustomers.map((c, i) => /* @__PURE__ */ React.createElement(
       "tr",
       {
         key: c.id,
         onClick: () => setSelected(c),
         className: `${i % 2 === 0 ? "" : "bg-muted/20"} cursor-pointer hover:bg-muted/40 transition-colors`
       },
-      /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ React.createElement("span", { className: "truncate max-w-[12rem]", title: c.id }, c.id), /* @__PURE__ */ React.createElement(
+      /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs", onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ React.createElement(
         "button",
         {
-          onClick: (e) => {
-            e.stopPropagation();
-            navigator.clipboard.writeText(c.id).then(() => {
-              setCopied(c.id);
-              setTimeout(() => setCopied(null), 2e3);
-            });
-          },
-          title: "Copy customer ID",
-          className: "shrink-0 text-muted-foreground hover:text-foreground"
+          onClick: () => handleCopy(c.id),
+          title: "Copy customer ID (click the row to open its billing view)",
+          className: "truncate max-w-[12rem] text-left hover:underline"
         },
-        "copy"
+        c.id
       ), /* @__PURE__ */ React.createElement("span", { className: "w-14 shrink-0 text-[10px] text-green-600" }, copied === c.id ? "copied!" : ""))),
       /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 truncate" }, displayName(c)),
       /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs truncate" }, c.email ?? "—"),
@@ -474,7 +474,7 @@
           className: "text-primary hover:underline"
         },
         "Dashboard"
-      ), /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground", style: { marginInline: "10px" } }, "·"), /* @__PURE__ */ React.createElement(
+      ), /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground", style: { marginInline: "6px" } }, "·"), /* @__PURE__ */ React.createElement(
         "a",
         {
           href: stripeDashboardUrl(mode, "/billing/meters"),
@@ -483,8 +483,7 @@
           className: "text-primary hover:underline"
         },
         "Meters"
-      )),
-      /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-right text-xs text-muted-foreground" }, "Details →")
+      ))
     ))))), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3 text-sm mt-4" }, /* @__PURE__ */ React.createElement(
       "button",
       {
