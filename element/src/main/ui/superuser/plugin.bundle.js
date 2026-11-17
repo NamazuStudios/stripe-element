@@ -490,6 +490,15 @@
     const [usage, setUsage] = React.useState({});
     const [subscriptions, setSubscriptions] = React.useState(null);
     const [loading, setLoading] = React.useState(true);
+    const days = React.useMemo(() => {
+      const list = [];
+      for (let i = USAGE_DAYS - 1; i >= 0; i--) {
+        const d = /* @__PURE__ */ new Date();
+        d.setDate(d.getDate() - i);
+        list.push({ key: d.toDateString(), label: d.toLocaleDateString(void 0, { month: "short", day: "numeric" }) });
+      }
+      return list;
+    }, []);
     React.useEffect(() => {
       let cancelled = false;
       async function load() {
@@ -497,7 +506,7 @@
         const headers = { ...sessionHeaders(), "X-Stripe-Mode": mode };
         const end = /* @__PURE__ */ new Date();
         const start = new Date(end.getTime() - USAGE_DAYS * 24 * 3600 * 1e3);
-        const range = `&start=${start.toISOString().slice(0, 17)}00Z&end=${end.toISOString().slice(0, 17)}00Z`;
+        const range = `&start=${start.toISOString().slice(0, 17)}00Z&end=${end.toISOString().slice(0, 17)}00Z&window=hour`;
         const usageResult = {};
         await Promise.all(meters.map(async (m) => {
           try {
@@ -527,11 +536,36 @@
         cancelled = true;
       };
     }, [customerId, mode, meters]);
-    const hasUsage = Object.values(usage).some((u) => Array.isArray(u) && u.length > 0);
-    return /* @__PURE__ */ React.createElement("div", { className: "text-xs space-y-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "font-medium mb-1 text-muted-foreground" }, "Metered usage, last ", USAGE_DAYS, " days (Stripe aggregates)"), meters.length === 0 ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No active meters on this account.") : loading ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "Loading…") : !hasUsage ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No usage recorded for this customer in the window.") : /* @__PURE__ */ React.createElement("table", { className: "w-full max-w-lg" }, /* @__PURE__ */ React.createElement("tbody", null, meters.map((m) => {
-      const u = usage[m.eventName];
-      const total = Array.isArray(u) ? u.reduce((sum, s) => sum + parseFloat(s.aggregatedValue ?? "0"), 0) : null;
-      return /* @__PURE__ */ React.createElement("tr", { key: m.eventName }, /* @__PURE__ */ React.createElement("td", { className: "py-0.5 pr-4 font-mono" }, m.eventName), /* @__PURE__ */ React.createElement("td", { className: "py-0.5 text-right font-medium" }, total === null ? /* @__PURE__ */ React.createElement("span", { className: "text-destructive" }, "error") : Number.isInteger(total) ? total : total.toFixed(4)));
+    const usageByDay = React.useMemo(() => {
+      const map = {};
+      for (const [event, events] of Object.entries(usage)) {
+        map[event] = {};
+        if (Array.isArray(events)) {
+          for (const e of events) {
+            if (!e.startTime) continue;
+            const key = new Date(e.startTime).toDateString();
+            map[event][key] = (map[event][key] ?? 0) + parseFloat(e.aggregatedValue ?? "0");
+          }
+        }
+      }
+      return map;
+    }, [usage]);
+    const hasUsage = Object.values(usageByDay).some((days2) => Object.values(days2).some((v) => v !== 0));
+    function formatUsage(n) {
+      return n === 0 ? "·" : Number.isInteger(n) ? String(n) : n.toFixed(4);
+    }
+    return /* @__PURE__ */ React.createElement("div", { className: "text-xs space-y-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "font-medium mb-1 text-muted-foreground" }, "Metered usage by day, last ", USAGE_DAYS, " days (Stripe aggregates; local days)"), meters.length === 0 ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No active meters on this account.") : loading ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "Loading…") : !hasUsage ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No usage recorded for this customer in the window.") : /* @__PURE__ */ React.createElement("table", { className: "w-full max-w-2xl" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "text-muted-foreground" }, /* @__PURE__ */ React.createElement("th", { className: "py-0.5 pr-4 text-left font-medium" }, "Day"), meters.map((m) => /* @__PURE__ */ React.createElement("th", { key: m.eventName, className: "py-0.5 px-2 text-right font-mono font-medium" }, m.eventName)), /* @__PURE__ */ React.createElement("th", { className: "py-0.5 pr-4 text-right font-medium" }, "Total"))), /* @__PURE__ */ React.createElement("tbody", null, [...days].reverse().map(({ key, label }) => {
+      return /* @__PURE__ */ React.createElement("tr", { key }, /* @__PURE__ */ React.createElement("td", { className: "py-0.5 pr-4 text-muted-foreground" }, label), meters.map((m) => {
+        var _a2;
+        const value = ((_a2 = usageByDay[m.eventName]) == null ? void 0 : _a2[key]) ?? 0;
+        return /* @__PURE__ */ React.createElement("td", { key: m.eventName, className: `py-0.5 px-2 text-right font-mono ${value !== 0 ? "font-medium text-foreground" : "text-muted-foreground/50"}` }, usage[m.eventName] === "error" ? /* @__PURE__ */ React.createElement("span", { className: "text-destructive" }, "err") : formatUsage(value));
+      }), /* @__PURE__ */ React.createElement("td", { className: "py-0.5 pr-4 text-right font-mono text-muted-foreground" }, (() => {
+        const dayTotal = meters.reduce((sum, m) => {
+          var _a2;
+          return sum + (((_a2 = usageByDay[m.eventName]) == null ? void 0 : _a2[key]) ?? 0);
+        }, 0);
+        return dayTotal === 0 ? "·" : formatUsage(dayTotal);
+      })()));
     })))), subscriptions && subscriptions.length > 0 && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "font-medium mb-1 text-muted-foreground" }, "Subscriptions"), subscriptions.map((s) => /* @__PURE__ */ React.createElement("p", { key: s.subscriptionId, className: "font-mono" }, s.subscriptionId, " · ", /* @__PURE__ */ React.createElement("span", null, s.status), s.currentPeriodEnd && /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, " · renews ", new Date(s.currentPeriodEnd).toLocaleDateString())))));
   }
   const EVENT_TYPE_OPTIONS = [
