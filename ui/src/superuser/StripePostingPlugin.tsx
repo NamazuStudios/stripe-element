@@ -98,7 +98,7 @@ export function StripePostingPlugin() {
 
       <div className="flex flex-wrap gap-3 mb-4 items-end">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Mode</label>
+          <label className="block text-sm font-medium">Mode</label>
           <select
             value={mode}
             onChange={e => setMode(e.target.value)}
@@ -108,7 +108,7 @@ export function StripePostingPlugin() {
           </select>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Outcome</label>
+          <label className="block text-sm font-medium">Outcome</label>
           <select
             value={outcome}
             onChange={e => setOutcome(e.target.value)}
@@ -118,7 +118,7 @@ export function StripePostingPlugin() {
           </select>
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Customer ID</label>
+          <label className="block text-sm font-medium">Customer ID</label>
           <input
             value={customer}
             onChange={e => setCustomer(e.target.value)}

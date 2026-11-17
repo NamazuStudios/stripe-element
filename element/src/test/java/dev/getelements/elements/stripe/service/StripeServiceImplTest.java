@@ -1010,12 +1010,15 @@ class StripeServiceImplTest {
         when(customer.getCreated()).thenReturn(1700000000L);
         final var collection = mock(CustomerCollection.class);
         when(collection.getData()).thenReturn(List.of(customer));
+        when(collection.getHasMore()).thenReturn(true);
         when(gateway.listCustomers(any(), any())).thenReturn(collection);
 
-        final var result = service.listCustomers(100);
+        final var response = service.listCustomers(100, null);
 
-        assertEquals(1, result.size());
-        final var summary = result.getFirst();
+        assertEquals(1, response.customers().size());
+        assertTrue(response.hasMore());
+        assertEquals("cus_001", response.nextCursor());
+        final var summary = response.customers().getFirst();
         assertEquals("cus_001", summary.id());
         assertEquals("Acme", summary.name());
         assertEquals("billing@acme.test", summary.email());
@@ -1023,6 +1026,18 @@ class StripeServiceImplTest {
         assertEquals(Instant.ofEpochSecond(1700000000L).toString(), summary.created());
 
         verify(gateway).listCustomers(argThat(p -> p.getLimit() == 100L), any());
+    }
+
+    @Test
+    void listCustomers_passesStartingAfterCursor() throws StripeException {
+        final var collection = mock(CustomerCollection.class);
+        when(collection.getData()).thenReturn(List.of());
+        when(gateway.listCustomers(any(), any())).thenReturn(collection);
+
+        service.listCustomers(50, "cus_previous");
+
+        verify(gateway).listCustomers(argThat(p ->
+                p.getLimit() == 50L && "cus_previous".equals(p.getStartingAfter())), any());
     }
 
     @Test
@@ -1035,10 +1050,12 @@ class StripeServiceImplTest {
         when(collection.getData()).thenReturn(List.of(customer));
         when(gateway.listCustomers(any(), any())).thenReturn(collection);
 
-        final var result = service.listCustomers(100);
+        final var response = service.listCustomers(100, null);
 
-        assertTrue(result.getFirst().metadata().isEmpty());
-        assertNull(result.getFirst().created());
+        assertTrue(response.customers().getFirst().metadata().isEmpty());
+        assertNull(response.customers().getFirst().created());
+        assertFalse(response.hasMore());
+        assertEquals("cus_002", response.nextCursor());
     }
 
     // --- recordMeterEvent hardening: structured error detection ---

@@ -334,17 +334,24 @@
     const [error, setError] = React.useState(null);
     const [expanded, setExpanded] = React.useState(null);
     const [copied, setCopied] = React.useState(null);
-    async function fetchCustomers(selectedMode) {
+    const [cursorStack, setCursorStack] = React.useState([]);
+    const [hasMore, setHasMore] = React.useState(false);
+    async function fetchCustomers(selectedMode, startingAfter, nextStack) {
       setLoading(true);
       setError(null);
       setExpanded(null);
       try {
-        const res = await fetch(`/element/stripe/api/stripe/customers?limit=${Math.max(limit, 100)}`, {
+        const params = new URLSearchParams({ limit: String(Math.max(limit, 100)) });
+        if (startingAfter) params.set("startingAfter", startingAfter);
+        const res = await fetch(`/element/stripe/api/stripe/customers?${params}`, {
           credentials: "include",
           headers: { ...sessionHeaders(), "X-Stripe-Mode": selectedMode }
         });
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        setCustomers(await res.json());
+        const data = await res.json();
+        setCustomers(data.customers);
+        setHasMore(data.hasMore);
+        setCursorStack(nextStack);
         const metersRes = await fetch("/element/stripe/api/stripe/meters?active=true&limit=100", {
           credentials: "include",
           headers: { ...sessionHeaders(), "X-Stripe-Mode": selectedMode }
@@ -356,16 +363,37 @@
         setLoading(false);
       }
     }
+    const currentCursor = cursorStack.length ? cursorStack[cursorStack.length - 1] : null;
     React.useEffect(() => {
-      fetchCustomers(mode);
+      fetchCustomers(mode, null, []);
     }, [mode]);
+    function refreshCurrentPage() {
+      fetchCustomers(mode, currentCursor, cursorStack);
+    }
+    function fetchNext() {
+      if (!(customers == null ? void 0 : customers.length)) return;
+      fetchCustomers(mode, customers[customers.length - 1].id, [...cursorStack, customers[customers.length - 1].id]);
+    }
+    function fetchPrevious() {
+      if (!cursorStack.length) return;
+      const prevStack = cursorStack.slice(0, -1);
+      fetchCustomers(mode, prevStack.length ? prevStack[prevStack.length - 1] : null, prevStack);
+    }
     function handleCopy(id) {
       navigator.clipboard.writeText(id).then(() => {
         setCopied(id);
         setTimeout(() => setCopied(null), 2e3);
       });
     }
-    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-6xl" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between mb-1" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold" }, "Customers / Billing"), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3" }, /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-6xl" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between mb-1" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold" }, "Customers / Billing"), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: refreshCurrentPage,
+        disabled: loading,
+        className: "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
+      },
+      loading ? "Refreshing…" : "Refresh"
+    )), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-4" }, "Every customer on this Stripe account in the selected mode — each one is billing-enabled there. Expand a row for its recent metered usage (last ", USAGE_DAYS, " days, per meter, from Stripe's aggregates) and subscriptions. Cross-check posting decisions in the Postings tab."), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3 mb-4 items-end" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium" }, "Mode"), /* @__PURE__ */ React.createElement(
       "select",
       {
         value: mode,
@@ -373,26 +401,17 @@
         className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       },
       MODES.map((m) => /* @__PURE__ */ React.createElement("option", { key: m, value: m }, m === "production" ? "Production (live)" : "Sandbox (test)"))
-    ), /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        onClick: () => fetchCustomers(mode),
-        disabled: loading,
-        className: "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
-      },
-      loading ? "Refreshing…" : "Refresh"
-    ))), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Every customer on this Stripe account in the selected mode — each one is billing-enabled there. Expand a row for its recent metered usage (last ", USAGE_DAYS, " days, per meter, from Stripe's aggregates) and subscriptions. Cross-check posting decisions in the Postings tab."), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), customers && customers.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No customers exist in ", mode, " mode yet."), customers && customers.length > 0 && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Customer ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Name"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Email"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Created"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Stripe"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2" }))), /* @__PURE__ */ React.createElement("tbody", null, customers.map((c, i) => {
+    ))), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), customers && customers.length === 0 && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No customers exist in ", mode, " mode yet."), customers && customers.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm table-fixed" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground w-[18rem]" }, "Customer ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Name"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Email"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Created"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Stripe"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2" }))), /* @__PURE__ */ React.createElement("tbody", null, customers.map((c, i) => {
       const isExpanded = expanded === c.id;
-      return /* @__PURE__ */ React.createElement(React.Fragment, { key: c.id }, /* @__PURE__ */ React.createElement("tr", { className: `${i % 2 === 0 ? "" : "bg-muted/20"} ${isExpanded ? "bg-muted/40" : ""}` }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, /* @__PURE__ */ React.createElement(
+      return /* @__PURE__ */ React.createElement(React.Fragment, { key: c.id }, /* @__PURE__ */ React.createElement("tr", { className: `${i % 2 === 0 ? "" : "bg-muted/20"} ${isExpanded ? "bg-muted/40" : ""}` }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-2" }, /* @__PURE__ */ React.createElement(
         "button",
         {
           onClick: () => handleCopy(c.id),
           title: "Copy customer ID",
-          className: "hover:underline"
+          className: "truncate max-w-[12rem] text-left hover:underline"
         },
-        c.id,
-        copied === c.id && /* @__PURE__ */ React.createElement("span", { className: "ml-1 text-green-600" }, "copied!")
-      )), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, displayName(c)), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs" }, c.email ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs" }, c.created ? new Date(c.created).toLocaleDateString() : "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs" }, /* @__PURE__ */ React.createElement(
+        c.id
+      ), /* @__PURE__ */ React.createElement("span", { className: "w-14 shrink-0 text-[10px] text-green-600" }, copied === c.id ? "copied!" : ""))), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 truncate" }, displayName(c)), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs truncate" }, c.email ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs whitespace-nowrap" }, c.created ? new Date(c.created).toLocaleDateString() : "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs whitespace-nowrap" }, /* @__PURE__ */ React.createElement(
         "a",
         {
           href: stripeDashboardUrl(mode, `/customers/${c.id}`),
@@ -418,7 +437,23 @@
         },
         isExpanded ? "Hide" : "Usage"
       ))), isExpanded && /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement("td", { colSpan: 6, className: "px-4 py-3 bg-muted/10" }, /* @__PURE__ */ React.createElement(CustomerDetail, { customerId: c.id, mode, meters }))));
-    })))));
+    })))), /* @__PURE__ */ React.createElement("div", { className: "flex items-center gap-3 text-sm mt-4" }, /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: fetchPrevious,
+        disabled: loading || cursorStack.length === 0,
+        className: "rounded-md border border-border px-3 py-1.5 hover:bg-muted/40 disabled:opacity-50 transition-colors"
+      },
+      "← Previous"
+    ), /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, cursorStack.length > 0 ? `Page ${cursorStack.length + 1}` : "Page 1"), /* @__PURE__ */ React.createElement(
+      "button",
+      {
+        onClick: fetchNext,
+        disabled: loading || !hasMore,
+        className: "rounded-md border border-border px-3 py-1.5 hover:bg-muted/40 disabled:opacity-50 transition-colors"
+      },
+      "Next →"
+    ))));
   }
   function CustomerDetail({ customerId, mode, meters }) {
     const [usage, setUsage] = React.useState({});
@@ -462,7 +497,7 @@
       };
     }, [customerId, mode, meters]);
     const hasUsage = Object.values(usage).some((u) => Array.isArray(u) && u.length > 0);
-    return /* @__PURE__ */ React.createElement("div", { className: "text-xs space-y-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "font-medium mb-1 text-muted-foreground" }, "Metered usage, last ", USAGE_DAYS, " days (Stripe aggregates)"), meters.length === 0 ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No active meters on this account.") : loading ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "Loading\\u2026") : !hasUsage ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No usage recorded for this customer in the window.") : /* @__PURE__ */ React.createElement("table", { className: "w-full max-w-lg" }, /* @__PURE__ */ React.createElement("tbody", null, meters.map((m) => {
+    return /* @__PURE__ */ React.createElement("div", { className: "text-xs space-y-3" }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("p", { className: "font-medium mb-1 text-muted-foreground" }, "Metered usage, last ", USAGE_DAYS, " days (Stripe aggregates)"), meters.length === 0 ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No active meters on this account.") : loading ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "Loading…") : !hasUsage ? /* @__PURE__ */ React.createElement("span", { className: "text-muted-foreground" }, "No usage recorded for this customer in the window.") : /* @__PURE__ */ React.createElement("table", { className: "w-full max-w-lg" }, /* @__PURE__ */ React.createElement("tbody", null, meters.map((m) => {
       const u = usage[m.eventName];
       const total = Array.isArray(u) ? u.reduce((sum, s) => sum + parseFloat(s.aggregatedValue ?? "0"), 0) : null;
       return /* @__PURE__ */ React.createElement("tr", { key: m.eventName }, /* @__PURE__ */ React.createElement("td", { className: "py-0.5 pr-4 font-mono" }, m.eventName), /* @__PURE__ */ React.createElement("td", { className: "py-0.5 text-right font-medium" }, total === null ? /* @__PURE__ */ React.createElement("span", { className: "text-destructive" }, "error") : Number.isInteger(total) ? total : total.toFixed(4)));
@@ -614,7 +649,7 @@
         className: "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
       },
       loading ? "Refreshing…" : "Refresh"
-    )), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "What each billing meter-event posting attempt actually did, as recorded by consumer elements at reconciliation time. Posted records show the idempotency key their Stripe-side usage can be verified against (see the Customers tab); failed and skipped records surface their reason here."), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3 mb-4 items-end" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Mode"), /* @__PURE__ */ React.createElement(
+    )), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "What each billing meter-event posting attempt actually did, as recorded by consumer elements at reconciliation time. Posted records show the idempotency key their Stripe-side usage can be verified against (see the Customers tab); failed and skipped records surface their reason here."), /* @__PURE__ */ React.createElement("div", { className: "flex flex-wrap gap-3 mb-4 items-end" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium" }, "Mode"), /* @__PURE__ */ React.createElement(
       "select",
       {
         value: mode,
@@ -622,7 +657,7 @@
         className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       },
       MODE_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.value, value: o.value }, o.label))
-    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Outcome"), /* @__PURE__ */ React.createElement(
+    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium" }, "Outcome"), /* @__PURE__ */ React.createElement(
       "select",
       {
         value: outcome,
@@ -630,7 +665,7 @@
         className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       },
       OUTCOME_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.value, value: o.value }, o.label))
-    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Customer ID"), /* @__PURE__ */ React.createElement(
+    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "block text-sm font-medium" }, "Customer ID"), /* @__PURE__ */ React.createElement(
       "input",
       {
         value: customer,

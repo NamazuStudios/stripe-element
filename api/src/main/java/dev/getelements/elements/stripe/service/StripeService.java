@@ -4,6 +4,7 @@ import dev.getelements.elements.stripe.model.CreateCheckoutSessionRequest;
 import dev.getelements.elements.stripe.model.CreateCheckoutSessionResponse;
 import dev.getelements.elements.stripe.model.CreateCustomerResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
+import dev.getelements.elements.stripe.model.CustomerListResponse;
 import dev.getelements.elements.stripe.model.CustomerSummary;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
@@ -348,14 +349,15 @@ public interface StripeService {
      * view: which customers exist in a given mode, rather than what the consumer's bookkeeping
      * believes. Customers found here in a mode are, by definition, billing-enabled in it.
      *
-     * @param limit maximum results to return (1–100)
+     * @param limit         maximum results to return (1–100)
+     * @param startingAfter customer ID cursor for the next page; {@code null} for the first page
      */
-    default List<CustomerSummary> listCustomers(int limit) {
-        return listCustomers(limit, defaultMode());
+    default CustomerListResponse listCustomers(int limit, String startingAfter) {
+        return listCustomers(limit, startingAfter, defaultMode());
     }
 
-    /** Mode-aware variant of {@link #listCustomers(int)}. */
-    List<CustomerSummary> listCustomers(int limit, StripeMode mode);
+    /** Mode-aware variant of {@link #listCustomers(int, String)}. */
+    CustomerListResponse listCustomers(int limit, String startingAfter, StripeMode mode);
 
     /**
      * Creates a Stripe-hosted Checkout Session and returns the redirect URL. The customer is sent

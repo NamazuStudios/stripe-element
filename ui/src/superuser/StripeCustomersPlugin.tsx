@@ -9,6 +9,12 @@ interface CustomerSummary {
   created: string | null
 }
 
+interface CustomerListResponse {
+  customers: CustomerSummary[]
+  hasMore: boolean
+  nextCursor: string | null
+}
+
 interface MeterSummary {
   id: string
   displayName: string | null
@@ -60,17 +66,27 @@ export function StripeCustomersPlugin() {
   const [expanded, setExpanded] = React.useState<string | null>(null)
   const [copied, setCopied] = React.useState<string | null>(null)
 
-  async function fetchCustomers(selectedMode: Mode) {
+  // Cursor pagination: cursorStack[i] is the cursor page i+1 was fetched with (page 1 uses
+  // no cursor), so Previous can walk back and Refresh can reload the current page.
+  const [cursorStack, setCursorStack] = React.useState<string[]>([])
+  const [hasMore, setHasMore] = React.useState(false)
+
+  async function fetchCustomers(selectedMode: Mode, startingAfter: string | null, nextStack: string[]) {
     setLoading(true)
     setError(null)
     setExpanded(null)
     try {
-      const res = await fetch(`/element/stripe/api/stripe/customers?limit=${Math.max(limit, 100)}`, {
+      const params = new URLSearchParams({ limit: String(Math.max(limit, 100)) })
+      if (startingAfter) params.set('startingAfter', startingAfter)
+      const res = await fetch(`/element/stripe/api/stripe/customers?${params}`, {
         credentials: 'include',
         headers: { ...sessionHeaders(), 'X-Stripe-Mode': selectedMode },
       })
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-      setCustomers(await res.json())
+      const data: CustomerListResponse = await res.json()
+      setCustomers(data.customers)
+      setHasMore(data.hasMore)
+      setCursorStack(nextStack)
 
       const metersRes = await fetch('/element/stripe/api/stripe/meters?active=true&limit=100', {
         credentials: 'include',
@@ -84,7 +100,24 @@ export function StripeCustomersPlugin() {
     }
   }
 
-  React.useEffect(() => { fetchCustomers(mode) }, [mode])
+  const currentCursor = cursorStack.length ? cursorStack[cursorStack.length - 1] : null
+
+  React.useEffect(() => { fetchCustomers(mode, null, []) }, [mode])
+
+  function refreshCurrentPage() {
+    fetchCustomers(mode, currentCursor, cursorStack)
+  }
+
+  function fetchNext() {
+    if (!customers?.length) return
+    fetchCustomers(mode, customers[customers.length - 1].id, [...cursorStack, customers[customers.length - 1].id])
+  }
+
+  function fetchPrevious() {
+    if (!cursorStack.length) return
+    const prevStack = cursorStack.slice(0, -1)
+    fetchCustomers(mode, prevStack.length ? prevStack[prevStack.length - 1] : null, prevStack)
+  }
 
   function handleCopy(id: string) {
     navigator.clipboard.writeText(id).then(() => {
@@ -97,7 +130,23 @@ export function StripeCustomersPlugin() {
     <div className="p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-bold">Customers / Billing</h1>
-        <div className="flex items-center gap-3">
+        <button
+          onClick={refreshCurrentPage}
+          disabled={loading}
+          className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
+        >
+          {loading ? 'Refreshing\u2026' : 'Refresh'}
+        </button>
+      </div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Every customer on this Stripe account in the selected mode — each one is billing-enabled there.
+        Expand a row for its recent metered usage (last {USAGE_DAYS} days, per meter, from Stripe's
+        aggregates) and subscriptions. Cross-check posting decisions in the Postings tab.
+      </p>
+
+      <div className="flex flex-wrap gap-3 mb-4 items-end">
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium">Mode</label>
           <select
             value={mode}
             onChange={e => setMode(e.target.value as Mode)}
@@ -105,20 +154,8 @@ export function StripeCustomersPlugin() {
           >
             {MODES.map(m => <option key={m} value={m}>{m === 'production' ? 'Production (live)' : 'Sandbox (test)'}</option>)}
           </select>
-          <button
-            onClick={() => fetchCustomers(mode)}
-            disabled={loading}
-            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
-          >
-            {loading ? 'Refreshing\u2026' : 'Refresh'}
-          </button>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground mb-6">
-        Every customer on this Stripe account in the selected mode — each one is billing-enabled there.
-        Expand a row for its recent metered usage (last {USAGE_DAYS} days, per meter, from Stripe's
-        aggregates) and subscriptions. Cross-check posting decisions in the Postings tab.
-      </p>
 
       {error && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4">
@@ -131,79 +168,108 @@ export function StripeCustomersPlugin() {
       )}
 
       {customers && customers.length > 0 && (
-        <div className="rounded-md border border-border overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Customer ID</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Name</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Email</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Created</th>
-                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Stripe</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((c, i) => {
-                const isExpanded = expanded === c.id
-                return (
-                  <React.Fragment key={c.id}>
-                    <tr className={`${i % 2 === 0 ? '' : 'bg-muted/20'} ${isExpanded ? 'bg-muted/40' : ''}`}>
-                      <td className="px-4 py-2 font-mono text-xs">
-                        <button
-                          onClick={() => handleCopy(c.id)}
-                          title="Copy customer ID"
-                          className="hover:underline"
-                        >
-                          {c.id}{copied === c.id && <span className="ml-1 text-green-600">copied!</span>}
-                        </button>
-                      </td>
-                      <td className="px-4 py-2">{displayName(c)}</td>
-                      <td className="px-4 py-2 text-muted-foreground text-xs">{c.email ?? '—'}</td>
-                      <td className="px-4 py-2 text-muted-foreground text-xs">
-                        {c.created ? new Date(c.created).toLocaleDateString() : '—'}
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        <a
-                          href={stripeDashboardUrl(mode, `/customers/${c.id}`)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          Dashboard ↗
-                        </a>
-                        <span className="mx-1 text-muted-foreground">·</span>
-                        <a
-                          href={stripeDashboardUrl(mode, '/billing/meters')}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          Meters ↗
-                        </a>
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        <button
-                          onClick={() => setExpanded(isExpanded ? null : c.id)}
-                          className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/40 transition-colors"
-                        >
-                          {isExpanded ? 'Hide' : 'Usage'}
-                        </button>
-                      </td>
-                    </tr>
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-3 bg-muted/10">
-                          <CustomerDetail customerId={c.id} mode={mode} meters={meters} />
+        <>
+          <div className="rounded-md border border-border overflow-x-auto">
+            <table className="w-full text-sm table-fixed">
+              <thead>
+                <tr className="border-b border-border bg-muted/40">
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground w-[18rem]">Customer ID</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Name</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Email</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Created</th>
+                  <th className="px-4 py-2 text-left font-medium text-muted-foreground">Stripe</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c, i) => {
+                  const isExpanded = expanded === c.id
+                  return (
+                    <React.Fragment key={c.id}>
+                      <tr className={`${i % 2 === 0 ? '' : 'bg-muted/20'} ${isExpanded ? 'bg-muted/40' : ''}`}>
+                        <td className="px-4 py-2 font-mono text-xs">
+                          {/* Fixed-width flex: the copied! flag occupies reserved space so
+                              toggling it never reflows the table. */}
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleCopy(c.id)}
+                              title="Copy customer ID"
+                              className="truncate max-w-[12rem] text-left hover:underline"
+                            >
+                              {c.id}
+                            </button>
+                            <span className="w-14 shrink-0 text-[10px] text-green-600">
+                              {copied === c.id ? 'copied!' : ''}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 truncate">{displayName(c)}</td>
+                        <td className="px-4 py-2 text-muted-foreground text-xs truncate">{c.email ?? '—'}</td>
+                        <td className="px-4 py-2 text-muted-foreground text-xs whitespace-nowrap">
+                          {c.created ? new Date(c.created).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="px-4 py-2 text-xs whitespace-nowrap">
+                          <a
+                            href={stripeDashboardUrl(mode, `/customers/${c.id}`)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            Dashboard ↗
+                          </a>
+                          <span className="mx-1 text-muted-foreground">·</span>
+                          <a
+                            href={stripeDashboardUrl(mode, '/billing/meters')}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            Meters ↗
+                          </a>
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          <button
+                            onClick={() => setExpanded(isExpanded ? null : c.id)}
+                            className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted/40 transition-colors"
+                          >
+                            {isExpanded ? 'Hide' : 'Usage'}
+                          </button>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-3 bg-muted/10">
+                            <CustomerDetail customerId={c.id} mode={mode} meters={meters} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center gap-3 text-sm mt-4">
+            <button
+              onClick={fetchPrevious}
+              disabled={loading || cursorStack.length === 0}
+              className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40 disabled:opacity-50 transition-colors"
+            >
+              ← Previous
+            </button>
+            <span className="text-muted-foreground">
+              {cursorStack.length > 0 ? `Page ${cursorStack.length + 1}` : 'Page 1'}
+            </span>
+            <button
+              onClick={fetchNext}
+              disabled={loading || !hasMore}
+              className="rounded-md border border-border px-3 py-1.5 hover:bg-muted/40 disabled:opacity-50 transition-colors"
+            >
+              Next →
+            </button>
+          </div>
+        </>
       )}
     </div>
   )
@@ -265,7 +331,7 @@ function CustomerDetail({ customerId, mode, meters }: {
         {meters.length === 0 ? (
           <span className="text-muted-foreground">No active meters on this account.</span>
         ) : loading ? (
-          <span className="text-muted-foreground">Loading\u2026</span>
+          <span className="text-muted-foreground">{'Loading\u2026'}</span>
         ) : !hasUsage ? (
           <span className="text-muted-foreground">No usage recorded for this customer in the window.</span>
         ) : (

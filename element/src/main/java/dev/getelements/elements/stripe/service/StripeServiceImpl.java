@@ -32,6 +32,7 @@ import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
+import dev.getelements.elements.stripe.model.CustomerListResponse;
 import dev.getelements.elements.stripe.model.CustomerSummary;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.MeterSummary;
@@ -627,15 +628,20 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
-    public List<CustomerSummary> listCustomers(int limit, StripeMode mode) {
+    public CustomerListResponse listCustomers(int limit, String startingAfter, StripeMode mode) {
 
         try {
 
-            final var params = CustomerListParams.builder()
-                    .setLimit((long) limit)
-                    .build();
+            final var builder = CustomerListParams.builder()
+                    .setLimit((long) limit);
 
-            return gateway.listCustomers(params, mode).getData().stream()
+            if (startingAfter != null && !startingAfter.isBlank()) {
+                builder.setStartingAfter(startingAfter);
+            }
+
+            final var collection = gateway.listCustomers(builder.build(), mode);
+
+            final var customers = collection.getData().stream()
                     .map(c -> new CustomerSummary(
                             c.getId(),
                             c.getName(),
@@ -643,6 +649,9 @@ public class StripeServiceImpl implements StripeService {
                             c.getMetadata() != null ? c.getMetadata() : java.util.Map.of(),
                             c.getCreated() != null ? Instant.ofEpochSecond(c.getCreated()).toString() : null))
                     .toList();
+
+            final var nextCursor = customers.isEmpty() ? null : customers.getLast().id();
+            return new CustomerListResponse(customers, Boolean.TRUE.equals(collection.getHasMore()), nextCursor);
 
         } catch (StripeException e) {
             throw stripeError(e);
