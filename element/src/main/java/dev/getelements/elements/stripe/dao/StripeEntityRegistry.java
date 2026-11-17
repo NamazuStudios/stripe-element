@@ -5,6 +5,7 @@ import dev.getelements.elements.sdk.annotation.ElementServiceImplementation;
 import dev.getelements.elements.sdk.dao.EntityRegistry;
 import dev.getelements.elements.stripe.model.StripeConfigDocument;
 import dev.getelements.elements.stripe.model.StripeEventLogDocument;
+import dev.getelements.elements.stripe.model.MeterPostingDocument;
 
 import java.util.List;
 
@@ -18,7 +19,7 @@ public class StripeEntityRegistry implements EntityRegistry {
 
     @Override
     public List<Class<?>> entityClasses() {
-        return List.of(StripeConfigDocument.class, StripeEventLogDocument.class);
+        return List.of(StripeConfigDocument.class, StripeEventLogDocument.class, MeterPostingDocument.class);
     }
 
 }

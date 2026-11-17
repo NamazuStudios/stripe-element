@@ -6,7 +6,9 @@ import dev.getelements.elements.sdk.annotation.ElementServiceExport;
 import dev.getelements.elements.sdk.annotation.ElementServiceImplementation;
 import dev.getelements.elements.stripe.rest.StripeConfigEndpoint;
 import dev.getelements.elements.stripe.rest.StripeEventLogEndpoint;
+import dev.getelements.elements.stripe.rest.StripeMeterEndpoint;
 import dev.getelements.elements.stripe.rest.StripePaymentEndpoint;
+import dev.getelements.elements.stripe.rest.StripePostingEndpoint;
 import dev.getelements.elements.stripe.rest.StripeWebhookEndpoint;
 import jakarta.ws.rs.core.Application;
 
@@ -47,6 +49,8 @@ public class StripeApplication extends Application {
                 StripePaymentEndpoint.class,
                 StripeConfigEndpoint.class,
                 StripeEventLogEndpoint.class,
+                StripeMeterEndpoint.class,
+                StripePostingEndpoint.class,
                 StripeOpenAPIConfig.class
         );
     }

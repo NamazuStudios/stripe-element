@@ -7,6 +7,8 @@ import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreatePortalSessionResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
+import dev.getelements.elements.stripe.model.CustomerListResponse;
+import dev.getelements.elements.stripe.model.CustomerSummary;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
@@ -202,6 +204,26 @@ class StripePaymentEndpointTest {
 
         assertEquals(Response.Status.NO_CONTENT.getStatusCode(), response.getStatus());
         verify(stripeService).recordMeterEvent("cus_test", "api_requests", BigDecimal.valueOf(10), "idem-key-1");
+    }
+
+    @Test
+    void listCustomers_delegatesToServiceAndReturnsResult() {
+        final var expected = new CustomerListResponse(
+                List.of(new CustomerSummary("cus_001", "Acme", "a@b.c", java.util.Map.of(), "2026-01-01T00:00:00Z", true)),
+                false, null);
+        when(stripeService.listCustomers(100, null)).thenReturn(expected);
+
+        assertSame(expected, endpoint.listCustomers(100, null, null));
+        verify(stripeService).listCustomers(100, null);
+    }
+
+    @Test
+    void listCustomers_withModeHeader_delegatesToModeAwareOverload() {
+        final var expected = new CustomerListResponse(List.of(), false, null);
+        when(stripeService.listCustomers(25, "cus_cursor", StripeMode.SANDBOX)).thenReturn(expected);
+
+        assertSame(expected, endpoint.listCustomers(25, "cus_cursor", "sandbox"));
+        verify(stripeService).listCustomers(25, "cus_cursor", StripeMode.SANDBOX);
     }
 
 }

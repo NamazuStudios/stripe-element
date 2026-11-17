@@ -3,9 +3,14 @@ package dev.getelements.elements.stripe.service;
 import com.google.inject.Inject;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
+import com.stripe.model.CustomerCollection;
 import com.stripe.model.CustomerSearchResult;
 import com.stripe.model.Invoice;
 import com.stripe.model.InvoiceCollection;
+import com.stripe.model.Charge;
+import com.stripe.model.ChargeCollection;
+import com.stripe.model.PaymentIntent;
+import com.stripe.model.PaymentIntentCollection;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethodCollection;
 import com.stripe.model.Price;
@@ -18,13 +23,19 @@ import com.stripe.model.SubscriptionCollection;
 import com.stripe.model.billing.Meter;
 import com.stripe.model.billing.MeterCollection;
 import com.stripe.model.billing.MeterEvent;
+import com.stripe.model.billing.MeterEventSummary;
+import com.stripe.model.billing.MeterEventSummaryCollection;
 import com.stripe.model.billingportal.Session;
 import com.stripe.net.RequestOptions;
+import com.stripe.param.ChargeListParams;
 import com.stripe.param.CustomerCreateParams;
+import com.stripe.param.CustomerListParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
 import com.stripe.param.CustomerSearchParams;
 import com.stripe.param.CustomerUpdateParams;
 import com.stripe.param.InvoiceListParams;
+import com.stripe.param.InvoiceUpcomingParams;
+import com.stripe.param.PaymentIntentListParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.PriceListParams;
 import com.stripe.param.ProductListParams;
@@ -34,6 +45,7 @@ import com.stripe.param.SubscriptionCancelParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.billing.MeterEventCreateParams;
+import com.stripe.param.billing.MeterEventSummaryListParams;
 import com.stripe.param.billing.MeterListParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 import dev.getelements.elements.stripe.model.StripeMode;
@@ -132,8 +144,33 @@ public class DefaultStripeGateway implements StripeGateway {
     }
 
     @Override
+    public MeterEventSummaryCollection listMeterEventSummaries(String meterId, MeterEventSummaryListParams params, StripeMode mode) throws StripeException {
+        return MeterEventSummary.list(meterId, params, options(mode));
+    }
+
+    @Override
     public CustomerSearchResult searchCustomers(CustomerSearchParams params, StripeMode mode) throws StripeException {
         return Customer.search(params, options(mode));
+    }
+
+    @Override
+    public CustomerCollection listCustomers(CustomerListParams params, StripeMode mode) throws StripeException {
+        return Customer.list(params, options(mode));
+    }
+
+    @Override
+    public ChargeCollection listCharges(ChargeListParams params, StripeMode mode) throws StripeException {
+        return Charge.list(params, options(mode));
+    }
+
+    @Override
+    public Invoice retrieveUpcomingInvoice(InvoiceUpcomingParams params, StripeMode mode) throws StripeException {
+        return Invoice.upcoming(params, options(mode));
+    }
+
+    @Override
+    public PaymentIntentCollection listPaymentIntents(PaymentIntentListParams params, StripeMode mode) throws StripeException {
+        return PaymentIntent.list(params, options(mode));
     }
 
     @Override

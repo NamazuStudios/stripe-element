@@ -1,6 +1,7 @@
 package dev.getelements.elements.stripe.rest;
 
 import dev.getelements.elements.sdk.ElementSupplier;
+import dev.getelements.elements.stripe.model.ChargeSummary;
 import dev.getelements.elements.stripe.model.CreateCheckoutSessionRequest;
 import dev.getelements.elements.stripe.model.CreateCheckoutSessionResponse;
 import dev.getelements.elements.stripe.model.CreateCustomerResponse;
@@ -8,7 +9,12 @@ import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreatePortalSessionResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
+import dev.getelements.elements.stripe.model.CustomerListResponse;
+import dev.getelements.elements.stripe.model.CustomerSummary;
+import dev.getelements.elements.stripe.model.CustomerUsageRollup;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
+import dev.getelements.elements.stripe.model.PaymentIntentSummary;
+import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
 import dev.getelements.elements.stripe.model.RecordMeterEventRequest;
@@ -214,6 +220,45 @@ public class StripePaymentEndpoint {
     }
 
     @GET
+    @Path("/customers")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "List Stripe customers",
+            description = "Returns this account's own Stripe customers in the selected mode — the discovery side of " +
+                    "the billing-posture view: a customer present here is billing-enabled in that mode. Supports cursor pagination.",
+            security = {@SecurityRequirement(name = SESSION_SECRET)}
+    )
+    public CustomerListResponse listCustomers(
+            @QueryParam("limit") @DefaultValue("100") int limit,
+            @QueryParam("startingAfter") String startingAfter,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.listCustomers(limit, startingAfter, mode)
+                : stripeService.listCustomers(limit, startingAfter);
+    }
+
+    @GET
+    @Path("/customers/usage")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Usage totals per customer",
+            description = "Computes metered usage totals for every customer over a trailing window (cached briefly) — " +
+                    "the account-wide rollup Stripe's API does not provide. Customers with unfetchable aggregates report " +
+                    "total = null (unknown), never zero. Pass refresh=true to bypass the cache.",
+            security = {@SecurityRequirement(name = SESSION_SECRET)}
+    )
+    public CustomerUsageRollup getCustomerUsageTotals(
+            @QueryParam("window") @DefaultValue("7") int window,
+            @QueryParam("refresh") @DefaultValue("false") boolean refresh,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.getCustomerUsageTotals(window, refresh, mode)
+                : stripeService.getCustomerUsageTotals(window, refresh);
+    }
+
+    @GET
     @Path("/customers/search")
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
@@ -272,6 +317,85 @@ public class StripePaymentEndpoint {
         return mode != null
                 ? stripeService.listInvoices(customerId, limit, startingAfter, mode)
                 : stripeService.listInvoices(customerId, limit, startingAfter);
+    }
+
+    @GET
+    @Path("/customer/{customerId}/charges")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "List charges for a customer",
+            description = "Returns charges against the given customer, newest first — the ground truth of money " +
+                    "movement for one-time purchases, with refund state and Stripe-hosted receipt URLs. Supports cursor pagination.",
+            security = {@SecurityRequirement(name = SESSION_SECRET)}
+    )
+    public List<ChargeSummary> listCharges(
+            @PathParam("customerId") String customerId,
+            @QueryParam("limit") @DefaultValue("10") int limit,
+            @QueryParam("startingAfter") String startingAfter,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.listCharges(customerId, limit, startingAfter, mode)
+                : stripeService.listCharges(customerId, limit, startingAfter);
+    }
+
+    @GET
+    @Path("/customer/{customerId}/upcoming-invoice")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Preview the customer's next invoice",
+            description = "Returns a preview of the customer's upcoming invoice, where pending metered usage appears " +
+                "as a line item. Returns 204 when the customer has nothing pending — no subscription and no usage.",
+            security = {@SecurityRequirement(name = SESSION_SECRET)}
+    )
+    public Response getUpcomingInvoice(
+            @PathParam("customerId") String customerId,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        final var invoice = mode != null
+                ? stripeService.getUpcomingInvoice(customerId, mode)
+                : stripeService.getUpcomingInvoice(customerId);
+        return invoice
+                .map(Response::ok)
+                .orElse(Response.noContent())
+                .build();
+    }
+
+    @GET
+    @Path("/customer/{customerId}/payment-intents")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "List PaymentIntents for a customer",
+            description = "Returns PaymentIntents for the given customer, newest first — includes failed and " +
+                    "incomplete attempts, for debugging purchases that never became charges. Supports cursor pagination.",
+            security = {@SecurityRequirement(name = SESSION_SECRET)}
+    )
+    public List<PaymentIntentSummary> listPaymentIntents(
+            @PathParam("customerId") String customerId,
+            @QueryParam("limit") @DefaultValue("10") int limit,
+            @QueryParam("startingAfter") String startingAfter,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.listPaymentIntents(customerId, limit, startingAfter, mode)
+                : stripeService.listPaymentIntents(customerId, limit, startingAfter);
+    }
+
+    @GET
+    @Path("/customer/{customerId}/payment-methods")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "List payment methods for a customer",
+            description = "Returns the payment methods currently attached to the customer.",
+            security = {@SecurityRequirement(name = SESSION_SECRET)}
+    )
+    public List<PaymentMethodSummary> listPaymentMethods(
+            @PathParam("customerId") String customerId,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.listPaymentMethods(customerId, mode)
+                : stripeService.listPaymentMethods(customerId);
     }
 
     @POST

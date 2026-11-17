@@ -4,11 +4,20 @@ import dev.getelements.elements.stripe.model.CreateCheckoutSessionRequest;
 import dev.getelements.elements.stripe.model.CreateCheckoutSessionResponse;
 import dev.getelements.elements.stripe.model.CreateCustomerResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
+import dev.getelements.elements.stripe.model.ChargeSummary;
+import dev.getelements.elements.stripe.model.CustomerListResponse;
+import dev.getelements.elements.stripe.model.CustomerSummary;
+import dev.getelements.elements.stripe.model.CustomerUsageRollup;
+import dev.getelements.elements.stripe.model.CustomerUsageTotal;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
+import dev.getelements.elements.stripe.model.PaymentIntentSummary;
+import dev.getelements.elements.stripe.model.UpcomingInvoiceSummary;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
 import dev.getelements.elements.stripe.model.MeterSummary;
+import dev.getelements.elements.stripe.model.MeterUsageSummary;
+import dev.getelements.elements.stripe.model.MeterUsageSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
@@ -17,6 +26,7 @@ import dev.getelements.elements.stripe.model.SubscriptionListResponse;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -234,6 +244,47 @@ public interface StripeService {
     List<MeterSummary> listMeters(boolean activeOnly, int limit, StripeMode mode);
 
     /**
+     * Lists aggregated meter usage for the given meter event name and customer. This is the
+     * read-side counterpart to {@link #recordMeterEvent}: Stripe's v1 REST API deliberately
+     * exposes no listing of raw meter events (the meter-event object is write-only), so verifying
+     * that recorded usage actually landed is done against these aggregates — sum
+     * {@link MeterUsageSummary#aggregatedValue()} over the window(s) of interest and compare
+     * against the quantity the caller's own ledger recorded for the same customer, meter, and
+     * time range.
+     *
+     * <p>Both {@code customerId} and a meter for {@code eventName} are required by Stripe:
+     * a missing/blank customer ID is rejected up front, and an unknown or inactive event name
+     * raises {@link NoSuchMeterException} without a network call. Unresolvable time ranges are
+     * defaulted to the trailing 24 hours; boundaries are aligned per {@code window} (Stripe
+     * requires minute alignment generally and hour alignment for {@code "hour"}).
+     *
+     * @param eventName  the meter event name (as passed to {@link #recordMeterEvent}); required
+     * @param customerId Stripe customer ID ({@code cus_...}); required by Stripe's summaries API
+     * @param startTime  window start (inclusive), or {@code null} for {@code endTime} minus 24 hours
+     * @param endTime    window end (exclusive), or {@code null} for now
+     * @param window     {@code "hour"} to bucket the results, or {@code null} for a single
+     *                   aggregate over the whole range (Stripe's API also supports {@code "day"};
+     *                   the bundled stripe-java version's generated params don't yet)
+     */
+    default List<MeterUsageSummary> listMeterUsage(
+            String eventName,
+            String customerId,
+            Instant startTime,
+            Instant endTime,
+            String window) {
+        return listMeterUsage(eventName, customerId, startTime, endTime, window, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listMeterUsage(String, String, Instant, Instant, String)}. */
+    List<MeterUsageSummary> listMeterUsage(
+            String eventName,
+            String customerId,
+            Instant startTime,
+            Instant endTime,
+            String window,
+            StripeMode mode);
+
+    /**
      * Resolves the active recurring Price billing usage for the given meter event name — i.e. the
      * same join {@link #listMeters} performs per-meter, but targeted at a single, known event name
      * rather than fetching the whole catalogue. Intended for callers that already know which meter
@@ -299,6 +350,53 @@ public interface StripeService {
     Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue, StripeMode mode);
 
     /**
+     * Lists this account's own Stripe customers — the discovery side of the billing-posture
+     * view: which customers exist in a given mode, rather than what the consumer's bookkeeping
+     * believes. Customers found here in a mode are, by definition, billing-enabled in it.
+     *
+     * @param limit         maximum results to return (1–100)
+     * @param startingAfter customer ID cursor for the next page; {@code null} for the first page
+     */
+    default CustomerListResponse listCustomers(int limit, String startingAfter) {
+        return listCustomers(limit, startingAfter, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listCustomers(int, String)}. */
+    CustomerListResponse listCustomers(int limit, String startingAfter, StripeMode mode);
+
+    /**
+     * Computes metered usage totals for <strong>every</strong> customer on the account over a
+     * trailing window — the account-wide answer Stripe's API does not provide natively (event
+     * summaries require a per-customer query). Backs admin list views so clients need a single
+     * request instead of fanning out per customer.
+     *
+     * <p>The fan-out runs server-side with bounded concurrency, and results are cached briefly
+     * per (mode, window) so repeated list loads don't re-query Stripe. A customer whose
+     * aggregates could not be fetched reports {@code total = null} (unknown) rather than zero.
+     *
+     * @param windowDays trailing window in days (1–365)
+     */
+    default CustomerUsageRollup getCustomerUsageTotals(int windowDays) {
+        return getCustomerUsageTotals(windowDays, false, defaultMode());
+    }
+
+    /** Variant of {@link #getCustomerUsageTotals(int)} with cache control. */
+    default CustomerUsageRollup getCustomerUsageTotals(int windowDays, boolean bypassCache) {
+        return getCustomerUsageTotals(windowDays, bypassCache, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #getCustomerUsageTotals(int)}. */
+    default CustomerUsageRollup getCustomerUsageTotals(int windowDays, StripeMode mode) {
+        return getCustomerUsageTotals(windowDays, false, mode);
+    }
+
+    /**
+     * Mode-aware variant with cache control: {@code bypassCache = true} recomputes (and
+     * re-caches) even if a cached rollup is still fresh.
+     */
+    CustomerUsageRollup getCustomerUsageTotals(int windowDays, boolean bypassCache, StripeMode mode);
+
+    /**
      * Creates a Stripe-hosted Checkout Session and returns the redirect URL. The customer is sent
      * to this URL where Stripe handles payment method collection and confirmation. After the customer
      * completes or cancels, Stripe redirects to {@code successUrl} or {@code cancelUrl}.
@@ -342,6 +440,11 @@ public interface StripeService {
      * @param value          usage quantity to report, e.g. {@code 0.25} (must be &gt; 0)
      * @param idempotencyKey unique key for this event; re-submitting the same key is a no-op
      * @throws NoSuchMeterException if Stripe has no active meter configured for {@code eventName}
+     *
+     * The attempt is recorded to the posting-record store automatically: POSTED on success,
+     * FAILED on error (with the Stripe mode and this key as the ledger identifier). Callers
+     * only need to record decisions that never reach this method (skips) via
+     * {@link dev.getelements.elements.stripe.service.MeterPostingService}.
      */
     default void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey) {
         recordMeterEvent(customerId, eventName, value, idempotencyKey, defaultMode());
@@ -391,6 +494,53 @@ public interface StripeService {
 
     /** Mode-aware variant of {@link #listInvoices(String, int, String)}. */
     List<InvoiceSummary> listInvoices(String customerId, int limit, String startingAfter, StripeMode mode);
+
+    /**
+     * Lists charges against the given Stripe customer, newest first — the ground truth of
+     * money movement for one-time purchases. Includes succeeded and failed charges, with
+     * refund state and the Stripe-hosted receipt URL.
+     *
+     * @param customerId    Stripe customer ID
+     * @param limit         maximum results to return (1–100)
+     * @param startingAfter charge ID cursor for the next page; {@code null} for the first page
+     */
+    default List<ChargeSummary> listCharges(String customerId, int limit, String startingAfter) {
+        return listCharges(customerId, limit, startingAfter, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listCharges(String, int, String)}. */
+    List<ChargeSummary> listCharges(String customerId, int limit, String startingAfter, StripeMode mode);
+
+    /**
+     * Previews the customer's <strong>next invoice</strong> — the point where metered usage
+     * becomes money: pending meter events for the current period appear as usage line items.
+     * Returns {@link Optional#empty()} when the customer has nothing pending (no subscription
+     * and no usage against a metered price); that is a normal state, not an error.
+     *
+     * @param customerId Stripe customer ID
+     */
+    default java.util.Optional<UpcomingInvoiceSummary> getUpcomingInvoice(String customerId) {
+        return getUpcomingInvoice(customerId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #getUpcomingInvoice(String)}. */
+    java.util.Optional<UpcomingInvoiceSummary> getUpcomingInvoice(String customerId, StripeMode mode);
+
+    /**
+     * Lists PaymentIntents for the given Stripe customer, newest first. Unlike
+     * {@link #listCharges}, this includes attempts that never produced a charge (failed,
+     * requires-payment-method, canceled) — the right view for debugging failed purchases.
+     *
+     * @param customerId    Stripe customer ID
+     * @param limit         maximum results to return (1–100)
+     * @param startingAfter intent ID cursor for the next page; {@code null} for the first page
+     */
+    default List<PaymentIntentSummary> listPaymentIntents(String customerId, int limit, String startingAfter) {
+        return listPaymentIntents(customerId, limit, startingAfter, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listPaymentIntents(String, int, String)}. */
+    List<PaymentIntentSummary> listPaymentIntents(String customerId, int limit, String startingAfter, StripeMode mode);
 
     /**
      * Records a receipt for a confirmed payment in the platform receipt store. Called internally
