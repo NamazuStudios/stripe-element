@@ -209,7 +209,7 @@ class StripePaymentEndpointTest {
     @Test
     void listCustomers_delegatesToServiceAndReturnsResult() {
         final var expected = new CustomerListResponse(
-                List.of(new CustomerSummary("cus_001", "Acme", "a@b.c", java.util.Map.of(), "2026-01-01T00:00:00Z")),
+                List.of(new CustomerSummary("cus_001", "Acme", "a@b.c", java.util.Map.of(), "2026-01-01T00:00:00Z", true)),
                 false, null);
         when(stripeService.listCustomers(100, null)).thenReturn(expected);
 

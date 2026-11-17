@@ -38,6 +38,8 @@ import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
 import dev.getelements.elements.stripe.model.CustomerListResponse;
 import dev.getelements.elements.stripe.model.CustomerSummary;
+import dev.getelements.elements.stripe.model.CustomerUsageRollup;
+import dev.getelements.elements.stripe.model.CustomerUsageTotal;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.MeterSummary;
 import dev.getelements.elements.stripe.model.MeterUsageSummary;
@@ -61,6 +63,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -80,6 +83,21 @@ public class StripeServiceImpl implements StripeService {
 
     /** Hard cap on paged summaries so an over-wide window can't loop unboundedly. */
     private static final int SUMMARIES_HARD_CAP = 1000;
+
+    /** Page size for customer listing during usage rollups. */
+    private static final int CUSTOMER_PAGE_LIMIT = 100;
+
+    /** Hard cap on customers included in a usage rollup. */
+    private static final int CUSTOMER_ROLLUP_CAP = 1000;
+
+    /** Concurrent Stripe reads during a usage rollup. */
+    private static final int ROLLUP_PARALLELISM = 8;
+
+    /** How long a computed usage rollup is reused (keyed by mode + window). */
+    private static final long ROLLUP_CACHE_TTL_MS = 60_000;
+
+    private final java.util.concurrent.ConcurrentHashMap<String, CachedRollup> rollupCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     private final StripeGateway gateway;
     private final StripeConfigService configService;
@@ -619,6 +637,139 @@ public class StripeServiceImpl implements StripeService {
     }
 
     @Override
+    public CustomerUsageRollup getCustomerUsageTotals(int windowDays, boolean bypassCache, StripeMode mode) {
+
+        final var clampedWindow = Math.max(1, Math.min(365, windowDays));
+        final var cacheKey = mode.name() + "|" + clampedWindow;
+
+        final var cached = rollupCache.get(cacheKey);
+        if (!bypassCache && cached != null && System.currentTimeMillis() - cached.at() < ROLLUP_CACHE_TTL_MS) {
+            return cached.rollup();
+        }
+
+        try {
+
+            final var customers = new ArrayList<CustomerSummary>();
+            String startingAfter = null;
+            do {
+                final var page = listCustomers(CUSTOMER_PAGE_LIMIT, startingAfter, mode);
+                customers.addAll(page.customers());
+                startingAfter = Boolean.TRUE.equals(page.hasMore()) ? page.nextCursor() : null;
+            } while (startingAfter != null && customers.size() < CUSTOMER_ROLLUP_CAP);
+
+            final var meters = gateway.listMeters(MeterListParams.builder()
+                            .setLimit(100L)
+                            .setStatus(MeterListParams.Status.ACTIVE)
+                            .build(), mode)
+                    .getData();
+
+            final var start = Instant.now().minus(java.time.Duration.ofDays(clampedWindow))
+                    .truncatedTo(ChronoUnit.MINUTES);
+            final var end = Instant.now().truncatedTo(ChronoUnit.MINUTES);
+
+            // Worker pool over a shared queue: bounded concurrent Stripe reads, one task per
+            // customer, each summing every active meter for that customer.
+            final var queue = new java.util.concurrent.ConcurrentLinkedQueue<>(customers);
+            final var results = new java.util.concurrent.ConcurrentHashMap<String, CustomerUsageTotal>();
+
+            try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+                final var worker = new Runnable() {
+                    @Override
+                    public void run() {
+                        while (true) {
+                            final var customer = queue.poll();
+                            if (customer == null) {
+                                return;
+                            }
+                            results.put(customer.id(), sumCustomerUsage(customer, meters, start, end, mode));
+                        }
+                    }
+                };
+                final var parallelism = Math.min(ROLLUP_PARALLELISM, Math.max(1, customers.size()));
+                for (var i = 0; i < parallelism; i++) {
+                    executor.submit(worker);
+                }
+            } // close() joins the workers
+
+            final var totals = customers.stream()
+                    .map(c -> results.get(c.id()))
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            final var rollup = new CustomerUsageRollup(totals, clampedWindow, Instant.now().toString());
+            rollupCache.put(cacheKey, new CachedRollup(System.currentTimeMillis(), rollup));
+            return rollup;
+
+        } catch (StripeException e) {
+            throw stripeError(e);
+        }
+    }
+
+    /**
+     * Sums one customer's usage per active meter over the window. A failed meter aggregate
+     * makes the customer's total {@code null} (unknown) — never zero, so verification logic
+     * can't mistake an outage for inactivity.
+     */
+    private CustomerUsageTotal sumCustomerUsage(
+            CustomerSummary customer,
+            List<com.stripe.model.billing.Meter> meters,
+            Instant start,
+            Instant end,
+            StripeMode mode) {
+
+        var total = BigDecimal.ZERO;
+        var unknown = false;
+        final var byMeter = new java.util.LinkedHashMap<String, BigDecimal>();
+
+        for (final var meter : meters) {
+
+            try {
+
+                final var builder = MeterEventSummaryListParams.builder()
+                        .setCustomer(customer.id())
+                        .setStartTime(start.getEpochSecond())
+                        .setEndTime(end.getEpochSecond())
+                        .setLimit(SUMMARIES_PAGE_LIMIT);
+
+                var page = gateway.listMeterEventSummaries(meter.getId(), builder.build(), mode);
+                var meterTotal = BigDecimal.ZERO;
+                var hasMore = Boolean.TRUE.equals(page.getHasMore());
+                var cursor = page.getData().isEmpty() ? null : page.getData().getLast().getId();
+
+                for (final var summary : page.getData()) {
+                    if (summary.getAggregatedValue() != null) {
+                        meterTotal = meterTotal.add(summary.getAggregatedValue());
+                    }
+                }
+
+                // Page through long windows (bounded) so totals aren't silently truncated.
+                while (hasMore && cursor != null) {
+                    page = gateway.listMeterEventSummaries(meter.getId(), builder
+                            .setStartingAfter(cursor)
+                            .build(), mode);
+                    for (final var summary : page.getData()) {
+                        if (summary.getAggregatedValue() != null) {
+                            meterTotal = meterTotal.add(summary.getAggregatedValue());
+                        }
+                    }
+                    hasMore = Boolean.TRUE.equals(page.getHasMore());
+                    cursor = page.getData().isEmpty() ? null : page.getData().getLast().getId();
+                }
+
+                byMeter.put(meter.getEventName(), meterTotal);
+                total = total.add(meterTotal);
+
+            } catch (StripeException e) {
+                unknown = true; // this meter's aggregate is unknown; the customer total reflects it
+            }
+        }
+
+        return new CustomerUsageTotal(customer.id(), unknown ? null : total, byMeter);
+    }
+
+    private record CachedRollup(long at, CustomerUsageRollup rollup) {}
+
+    @Override
     public Optional<String> findCustomerByMetadata(String metadataKey, String metadataValue, StripeMode mode) {
 
         try {
@@ -658,7 +809,8 @@ public class StripeServiceImpl implements StripeService {
                             c.getName(),
                             c.getEmail(),
                             c.getMetadata() != null ? c.getMetadata() : java.util.Map.of(),
-                            c.getCreated() != null ? Instant.ofEpochSecond(c.getCreated()).toString() : null))
+                            c.getCreated() != null ? Instant.ofEpochSecond(c.getCreated()).toString() : null,
+                            Boolean.TRUE.equals(c.getLivemode())))
                     .toList();
 
             final var nextCursor = customers.isEmpty() ? null : customers.getLast().id();

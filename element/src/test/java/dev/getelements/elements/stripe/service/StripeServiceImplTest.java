@@ -901,6 +901,96 @@ class StripeServiceImplTest {
                 () -> service.updateCustomer("cus_test", "x@x.com", "X"));
     }
 
+    // --- getCustomerUsageTotals ---
+
+    private com.stripe.model.billing.MeterCollection mockMeterCatalogueWithId(String meterId, String eventName) throws StripeException {
+        final var meter = mock(com.stripe.model.billing.Meter.class);
+        // Lenient: some rollup tests never reach the per-meter mapping where these are read.
+        lenient().when(meter.getEventName()).thenReturn(eventName);
+        lenient().when(meter.getId()).thenReturn(meterId);
+        final var meterCollection = mock(com.stripe.model.billing.MeterCollection.class);
+        when(meterCollection.getData()).thenReturn(List.of(meter));
+        when(gateway.listMeters(any(), any())).thenReturn(meterCollection);
+        return meterCollection;
+    }
+
+    @Test
+    void getCustomerUsageTotals_sumsUsagePerCustomerAcrossMeters() throws StripeException {
+        mockMeterCatalogueWithId("mtr_001", "server_hours_large");
+
+        final var customer = mock(Customer.class);
+        when(customer.getId()).thenReturn("cus_001");
+        final var customerCollection = mock(CustomerCollection.class);
+        when(customerCollection.getData()).thenReturn(List.of(customer));
+        when(customerCollection.getHasMore()).thenReturn(false);
+        when(gateway.listCustomers(any(), any())).thenReturn(customerCollection);
+
+        final var summary = mock(com.stripe.model.billing.MeterEventSummary.class);
+        when(summary.getAggregatedValue()).thenReturn(new java.math.BigDecimal("12.5"));
+        final var summaryCollection = mock(com.stripe.model.billing.MeterEventSummaryCollection.class);
+        when(summaryCollection.getData()).thenReturn(List.of(summary));
+        when(summaryCollection.getHasMore()).thenReturn(false);
+        when(gateway.listMeterEventSummaries(eq("mtr_001"), any(), any())).thenReturn(summaryCollection);
+
+        final var rollup = service.getCustomerUsageTotals(7);
+
+        assertEquals(1, rollup.totals().size());
+        final var total = rollup.totals().getFirst();
+        assertEquals("cus_001", total.customerId());
+        assertEquals(0, new java.math.BigDecimal("12.5").compareTo(total.total()));
+        assertEquals(0, new java.math.BigDecimal("12.5").compareTo(total.byMeter().get("server_hours_large")));
+        assertEquals(7, rollup.windowDays());
+    }
+
+    @Test
+    void getCustomerUsageTotals_isCachedPerModeAndWindow() throws StripeException {
+        mockMeterCatalogueWithId("mtr_001", "server_hours_large");
+
+        final var customerCollection = mock(CustomerCollection.class);
+        when(customerCollection.getData()).thenReturn(List.of());
+        when(gateway.listCustomers(any(), any())).thenReturn(customerCollection);
+
+        service.getCustomerUsageTotals(7);
+        service.getCustomerUsageTotals(7); // cached
+        service.getCustomerUsageTotals(30); // different window → recompute
+
+        verify(gateway, times(2)).listCustomers(any(), any());
+    }
+
+    @Test
+    void getCustomerUsageTotals_bypassCache_recomputes() throws StripeException {
+        mockMeterCatalogueWithId("mtr_001", "server_hours_large");
+
+        final var customerCollection = mock(CustomerCollection.class);
+        when(customerCollection.getData()).thenReturn(List.of());
+        when(gateway.listCustomers(any(), any())).thenReturn(customerCollection);
+
+        service.getCustomerUsageTotals(7);
+        service.getCustomerUsageTotals(7, true, StripeMode.PRODUCTION);
+
+        verify(gateway, times(2)).listCustomers(any(), any());
+    }
+
+    @Test
+    void getCustomerUsageTotals_failedMeterAggregate_totalUnknownNotZero() throws StripeException {
+        mockMeterCatalogueWithId("mtr_001", "server_hours_large");
+
+        final var customer = mock(Customer.class);
+        when(customer.getId()).thenReturn("cus_001");
+        final var customerCollection = mock(CustomerCollection.class);
+        when(customerCollection.getData()).thenReturn(List.of(customer));
+        when(customerCollection.getHasMore()).thenReturn(false);
+        when(gateway.listCustomers(any(), any())).thenReturn(customerCollection);
+
+        when(gateway.listMeterEventSummaries(any(), any(), any())).thenThrow(mock(StripeException.class));
+
+        final var rollup = service.getCustomerUsageTotals(7);
+
+        assertEquals(1, rollup.totals().size());
+        assertNull(rollup.totals().getFirst().total());
+        assertTrue(rollup.totals().getFirst().byMeter().isEmpty());
+    }
+
     // --- listCharges / getUpcomingInvoice / listPaymentIntents ---
 
     @Test

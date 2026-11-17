@@ -7,6 +7,8 @@ import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
 import dev.getelements.elements.stripe.model.ChargeSummary;
 import dev.getelements.elements.stripe.model.CustomerListResponse;
 import dev.getelements.elements.stripe.model.CustomerSummary;
+import dev.getelements.elements.stripe.model.CustomerUsageRollup;
+import dev.getelements.elements.stripe.model.CustomerUsageTotal;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.PaymentIntentSummary;
 import dev.getelements.elements.stripe.model.UpcomingInvoiceSummary;
@@ -361,6 +363,38 @@ public interface StripeService {
 
     /** Mode-aware variant of {@link #listCustomers(int, String)}. */
     CustomerListResponse listCustomers(int limit, String startingAfter, StripeMode mode);
+
+    /**
+     * Computes metered usage totals for <strong>every</strong> customer on the account over a
+     * trailing window — the account-wide answer Stripe's API does not provide natively (event
+     * summaries require a per-customer query). Backs admin list views so clients need a single
+     * request instead of fanning out per customer.
+     *
+     * <p>The fan-out runs server-side with bounded concurrency, and results are cached briefly
+     * per (mode, window) so repeated list loads don't re-query Stripe. A customer whose
+     * aggregates could not be fetched reports {@code total = null} (unknown) rather than zero.
+     *
+     * @param windowDays trailing window in days (1–365)
+     */
+    default CustomerUsageRollup getCustomerUsageTotals(int windowDays) {
+        return getCustomerUsageTotals(windowDays, false, defaultMode());
+    }
+
+    /** Variant of {@link #getCustomerUsageTotals(int)} with cache control. */
+    default CustomerUsageRollup getCustomerUsageTotals(int windowDays, boolean bypassCache) {
+        return getCustomerUsageTotals(windowDays, bypassCache, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #getCustomerUsageTotals(int)}. */
+    default CustomerUsageRollup getCustomerUsageTotals(int windowDays, StripeMode mode) {
+        return getCustomerUsageTotals(windowDays, false, mode);
+    }
+
+    /**
+     * Mode-aware variant with cache control: {@code bypassCache = true} recomputes (and
+     * re-caches) even if a cached rollup is still fresh.
+     */
+    CustomerUsageRollup getCustomerUsageTotals(int windowDays, boolean bypassCache, StripeMode mode);
 
     /**
      * Creates a Stripe-hosted Checkout Session and returns the redirect URL. The customer is sent

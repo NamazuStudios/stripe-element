@@ -3,7 +3,7 @@ import { sessionHeaders, defaultLimit } from './api'
 import { useCustomerBilling } from './customerBilling'
 import { CustomerPostingsSection } from './CustomerPostingsSection'
 import {
-  MODES, USAGE_DAYS, stripeDashboardUrl, formatMoney, usageRangeParams, sumUsage, type Mode, type MeterSummary,
+  MODES, USAGE_DAYS, stripeDashboardUrl, formatMoney, usageRangeParams, type Mode, type MeterSummary,
 } from './stripeMode'
 
 interface CustomerSummary {
@@ -25,10 +25,6 @@ function displayName(c: CustomerSummary): string {
   return c.name || c.metadata['orgName'] || c.metadata['name'] || c.email || '—'
 }
 
-// Concurrent customers being usage-summed for the "with usage only" filter. Meters within one
-// customer still fan out in parallel; this bounds the customer-level concurrency.
-const USAGE_FILTER_CONCURRENCY = 5
-
 export function StripeCustomersPlugin() {
   const limit = defaultLimit()
   const [mode, setMode] = React.useState<Mode>('production')
@@ -40,13 +36,14 @@ export function StripeCustomersPlugin() {
   const [selected, setSelected] = React.useState<CustomerSummary | null>(null)
   const [lookupId, setLookupId] = React.useState('')
 
-  // "With usage only" filter: fan out per-customer usage totals client-side (Stripe's API can
-  // only answer usage per customer, so there's no server-side filter). Uses Stripe's
-  // single-aggregate response (no hour bucketing) — one request per customer-meter regardless
-  // of window size. customerId -> week total, null while that customer is still being summed.
+  // "With usage only" filter: one request to the element's cached rollup endpoint (the element
+  // fans out to Stripe server-side with bounded concurrency). customerId -> trailing-window
+  // total; null = unknown (that customer's aggregates could not be fetched).
   const [usageOnly, setUsageOnly] = React.useState(false)
   const [usageWindowDays, setUsageWindowDays] = React.useState(7)
   const [usageTotals, setUsageTotals] = React.useState<Record<string, number | null>>({})
+  const [usageRollupKey, setUsageRollupKey] = React.useState(0)
+  const [usageRollupError, setUsageRollupError] = React.useState(false)
 
   // Cursor pagination: cursorStack[i] is the cursor page i+1 was fetched with (page 1 uses
   // no cursor), so Previous can walk back and Refresh can reload the current page.
@@ -86,55 +83,36 @@ export function StripeCustomersPlugin() {
 
   React.useEffect(() => { fetchCustomers(mode, null, []) }, [mode])
 
-  // Resolve the "with usage only" filter whenever it or the window changes, and whenever the
-  // customer page changes. Each customer costs one request per meter; they are processed
-  // through a small worker pool (rather than one giant parallel blast) so we don't exhaust the
-  // browser's per-host connection limit or trip Stripe's rate limits. Totals land
-  // progressively as workers finish.
+  // Resolve the "with usage only" filter from the element's cached rollup.
   React.useEffect(() => {
-    if (!usageOnly || !customers?.length || meters.length === 0) return
+    if (!usageOnly) return
     let cancelled = false
-    const headers = { ...sessionHeaders(), 'X-Stripe-Mode': mode }
-    const queue = [...customers]
-
-    async function totalFor(c: CustomerSummary): Promise<number> {
-      const results = await Promise.all(meters.map(m => fetch(
-        `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams(usageWindowDays)}`,
-        { credentials: 'include', headers })))
-      let total = 0
-      for (const res of results) {
-        if (!res.ok) {
-          console.warn(`usage query for ${c.id} failed: ${res.status}`)
-          continue
-        }
-        total += sumUsage(await res.json())
-      }
-      return total
-    }
-
-    async function worker() {
-      while (!cancelled) {
-        const c = queue.shift()
-        if (!c) return
-        try {
-          const total = await totalFor(c)
-          if (!cancelled) setUsageTotals(prev => ({ ...prev, [c.id]: total }))
-        } catch {
-          if (!cancelled) setUsageTotals(prev => ({ ...prev, [c.id]: null }))
+    setUsageRollupError(false)
+    setUsageTotals({})
+    ;(async () => {
+      try {
+        const res = await fetch(`/element/stripe/api/stripe/customers/usage?window=${usageWindowDays}${usageRollupKey > 0 ? '&refresh=true' : ''}`, {
+          credentials: 'include',
+          headers: { ...sessionHeaders(), 'X-Stripe-Mode': mode },
+        })
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+        const rollup: { totals: { customerId: string; total: string | null }[] } = await res.json()
+        if (cancelled) return
+        setUsageTotals(Object.fromEntries(rollup.totals.map(t => [t.customerId, t.total != null ? parseFloat(t.total) : null])))
+      } catch (e) {
+        if (!cancelled) {
+          console.warn('usage rollup failed', e)
+          setUsageRollupError(true)
         }
       }
-    }
-
-    const workers = Array.from({ length: Math.min(USAGE_FILTER_CONCURRENCY, queue.length) }, worker)
-    Promise.all(workers).catch(() => { /* per-customer errors already handled */ })
+    })()
     return () => { cancelled = true }
-  }, [usageOnly, usageWindowDays, customers, meters, mode])
+  }, [usageOnly, usageWindowDays, usageRollupKey, customers, mode])
 
-  const filteredCustomers = usageOnly
+  const filteredCustomers = usageOnly && !usageRollupError
     ? (customers ?? []).filter(c => (usageTotals[c.id] ?? 0) > 0)
     : (customers ?? [])
-  const usageFilterSettled = !usageOnly || filteredCustomers.length > 0 ||
-    (customers ?? []).every(c => usageTotals[c.id] !== undefined)
+  const usageFilterSettled = !usageOnly || usageRollupError || Object.keys(usageTotals).length > 0
 
   // Mode/data sanity: a production selection returning test-mode customers means the
   // production key for this deployment is a test key.
@@ -164,7 +142,10 @@ export function StripeCustomersPlugin() {
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-bold">Customers</h1>
         <button
-          onClick={() => fetchCustomers(mode, currentCursor, cursorStack)}
+          onClick={() => {
+            if (usageOnly) setUsageRollupKey(k => k + 1) // bypass the rollup cache
+            fetchCustomers(mode, currentCursor, cursorStack)
+          }}
           disabled={loading}
           className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
         >
@@ -245,6 +226,12 @@ export function StripeCustomersPlugin() {
           The customer data is <strong>{mode === 'production' ? 'test-mode' : 'live-mode'}</strong> but you are viewing the{' '}
           <strong>{mode}</strong> key — the {mode} API key configured for this deployment looks like a{' '}
           {mode === 'production' ? 'test' : 'live'} key. Check the Configuration tab.
+        </div>
+      )}
+
+      {usageOnly && usageRollupError && (
+        <div className="rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4">
+          Usage totals are unavailable right now — showing all customers. Try Refresh.
         </div>
       )}
 

@@ -13,10 +13,14 @@ import java.util.Map;
  * @param email    email address, or {@code null} if unset
  * @param metadata the customer's metadata map (never {@code null}, may be empty)
  * @param created  creation time, ISO-8601
+ * @param livemode {@code true} if this customer exists in Stripe's live (production) mode,
+ *                 {@code false} for test mode — lets clients detect a mode/key mismatch
+ *                 (e.g. a test key saved as the production key)
  */
 public record CustomerSummary(
         String id,
         String name,
         String email,
         Map<String, String> metadata,
-        String created) {}
+        String created,
+        boolean livemode) {}

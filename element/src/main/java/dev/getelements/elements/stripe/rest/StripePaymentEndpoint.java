@@ -11,6 +11,7 @@ import dev.getelements.elements.stripe.model.CreatePortalSessionResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
 import dev.getelements.elements.stripe.model.CustomerListResponse;
 import dev.getelements.elements.stripe.model.CustomerSummary;
+import dev.getelements.elements.stripe.model.CustomerUsageRollup;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.PaymentIntentSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
@@ -235,6 +236,26 @@ public class StripePaymentEndpoint {
         return mode != null
                 ? stripeService.listCustomers(limit, startingAfter, mode)
                 : stripeService.listCustomers(limit, startingAfter);
+    }
+
+    @GET
+    @Path("/customers/usage")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Usage totals per customer",
+            description = "Computes metered usage totals for every customer over a trailing window (cached briefly) — " +
+                    "the account-wide rollup Stripe's API does not provide. Customers with unfetchable aggregates report " +
+                    "total = null (unknown), never zero. Pass refresh=true to bypass the cache.",
+            security = {@SecurityRequirement(name = SESSION_SECRET)}
+    )
+    public CustomerUsageRollup getCustomerUsageTotals(
+            @QueryParam("window") @DefaultValue("7") int window,
+            @QueryParam("refresh") @DefaultValue("false") boolean refresh,
+            @Parameter(description = "sandbox or production") @HeaderParam(MODE_HEADER) String modeHeader) {
+        final var mode = parseMode(modeHeader);
+        return mode != null
+                ? stripeService.getCustomerUsageTotals(window, refresh, mode)
+                : stripeService.getCustomerUsageTotals(window, refresh);
     }
 
     @GET

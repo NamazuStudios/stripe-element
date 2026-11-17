@@ -330,7 +330,6 @@
   function displayName(c) {
     return c.name || c.metadata["orgName"] || c.metadata["name"] || c.email || "—";
   }
-  const USAGE_FILTER_CONCURRENCY = 5;
   function StripeCustomersPlugin() {
     const limit = defaultLimit();
     const [mode, setMode] = React.useState("production");
@@ -344,6 +343,8 @@
     const [usageOnly, setUsageOnly] = React.useState(false);
     const [usageWindowDays, setUsageWindowDays] = React.useState(7);
     const [usageTotals, setUsageTotals] = React.useState({});
+    const [usageRollupKey, setUsageRollupKey] = React.useState(0);
+    const [usageRollupError, setUsageRollupError] = React.useState(false);
     const [cursorStack, setCursorStack] = React.useState([]);
     const [hasMore, setHasMore] = React.useState(false);
     async function fetchCustomers(selectedMode, startingAfter, nextStack) {
@@ -378,46 +379,33 @@
       fetchCustomers(mode, null, []);
     }, [mode]);
     React.useEffect(() => {
-      if (!usageOnly || !(customers == null ? void 0 : customers.length) || meters.length === 0) return;
+      if (!usageOnly) return;
       let cancelled = false;
-      const headers = { ...sessionHeaders(), "X-Stripe-Mode": mode };
-      const queue = [...customers];
-      async function totalFor(c) {
-        const results = await Promise.all(meters.map((m) => fetch(
-          `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams(usageWindowDays)}`,
-          { credentials: "include", headers }
-        )));
-        let total = 0;
-        for (const res of results) {
-          if (!res.ok) {
-            console.warn(`usage query for ${c.id} failed: ${res.status}`);
-            continue;
-          }
-          total += sumUsage(await res.json());
-        }
-        return total;
-      }
-      async function worker() {
-        while (!cancelled) {
-          const c = queue.shift();
-          if (!c) return;
-          try {
-            const total = await totalFor(c);
-            if (!cancelled) setUsageTotals((prev) => ({ ...prev, [c.id]: total }));
-          } catch {
-            if (!cancelled) setUsageTotals((prev) => ({ ...prev, [c.id]: null }));
+      setUsageRollupError(false);
+      setUsageTotals({});
+      (async () => {
+        try {
+          const res = await fetch(`/element/stripe/api/stripe/customers/usage?window=${usageWindowDays}${usageRollupKey > 0 ? "&refresh=true" : ""}`, {
+            credentials: "include",
+            headers: { ...sessionHeaders(), "X-Stripe-Mode": mode }
+          });
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          const rollup = await res.json();
+          if (cancelled) return;
+          setUsageTotals(Object.fromEntries(rollup.totals.map((t) => [t.customerId, t.total != null ? parseFloat(t.total) : null])));
+        } catch (e) {
+          if (!cancelled) {
+            console.warn("usage rollup failed", e);
+            setUsageRollupError(true);
           }
         }
-      }
-      const workers = Array.from({ length: Math.min(USAGE_FILTER_CONCURRENCY, queue.length) }, worker);
-      Promise.all(workers).catch(() => {
-      });
+      })();
       return () => {
         cancelled = true;
       };
-    }, [usageOnly, usageWindowDays, customers, meters, mode]);
-    const filteredCustomers = usageOnly ? (customers ?? []).filter((c) => (usageTotals[c.id] ?? 0) > 0) : customers ?? [];
-    const usageFilterSettled = !usageOnly || filteredCustomers.length > 0 || (customers ?? []).every((c) => usageTotals[c.id] !== void 0);
+    }, [usageOnly, usageWindowDays, usageRollupKey, customers, mode]);
+    const filteredCustomers = usageOnly && !usageRollupError ? (customers ?? []).filter((c) => (usageTotals[c.id] ?? 0) > 0) : customers ?? [];
+    const usageFilterSettled = !usageOnly || usageRollupError || Object.keys(usageTotals).length > 0;
     const livemodeMismatch = (customers ?? []).length > 0 && (mode === "production" ? customers.some((c) => !c.livemode) : customers.some((c) => c.livemode));
     function handleCopy(id) {
       navigator.clipboard.writeText(id).then(() => {
@@ -439,7 +427,10 @@
     return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-6xl" }, /* @__PURE__ */ React.createElement("div", { className: "flex items-center justify-between mb-1" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold" }, "Customers"), /* @__PURE__ */ React.createElement(
       "button",
       {
-        onClick: () => fetchCustomers(mode, currentCursor, cursorStack),
+        onClick: () => {
+          if (usageOnly) setUsageRollupKey((k) => k + 1);
+          fetchCustomers(mode, currentCursor, cursorStack);
+        },
         disabled: loading,
         className: "rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40 disabled:opacity-50 transition-colors"
       },
@@ -494,7 +485,7 @@
           className: "w-64 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
         }
       )
-    )), livemodeMismatch && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4" }, "The customer data is ", /* @__PURE__ */ React.createElement("strong", null, mode === "production" ? "test-mode" : "live-mode"), " but you are viewing the", " ", /* @__PURE__ */ React.createElement("strong", null, mode), " key — the ", mode, " API key configured for this deployment looks like a", " ", mode === "production" ? "test" : "live", " key. Check the Configuration tab."), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), customers && !loading && filteredCustomers.length === 0 && usageFilterSettled && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, usageOnly ? "No customers with metered usage in the trailing window." : `No customers exist in ${mode} mode yet.`), filteredCustomers.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm table-fixed" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground w-[18rem]" }, "Customer ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Name"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Email"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Created"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Stripe"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2" }))), /* @__PURE__ */ React.createElement("tbody", null, filteredCustomers.map((c, i) => /* @__PURE__ */ React.createElement(
+    )), livemodeMismatch && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4" }, "The customer data is ", /* @__PURE__ */ React.createElement("strong", null, mode === "production" ? "test-mode" : "live-mode"), " but you are viewing the", " ", /* @__PURE__ */ React.createElement("strong", null, mode), " key — the ", mode, " API key configured for this deployment looks like a", " ", mode === "production" ? "test" : "live", " key. Check the Configuration tab."), usageOnly && usageRollupError && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-500 mb-4" }, "Usage totals are unavailable right now — showing all customers. Try Refresh."), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), customers && !loading && filteredCustomers.length === 0 && usageFilterSettled && /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, usageOnly ? "No customers with metered usage in the trailing window." : `No customers exist in ${mode} mode yet.`), filteredCustomers.length > 0 && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm table-fixed" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground w-[18rem]" }, "Customer ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Name"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Email"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Created"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Stripe"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2" }))), /* @__PURE__ */ React.createElement("tbody", null, filteredCustomers.map((c, i) => /* @__PURE__ */ React.createElement(
       "tr",
       {
         key: c.id,
