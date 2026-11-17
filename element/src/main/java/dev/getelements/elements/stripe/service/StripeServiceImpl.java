@@ -43,6 +43,8 @@ import dev.getelements.elements.stripe.model.MeterSummary;
 import dev.getelements.elements.stripe.model.MeterUsageSummary;
 import dev.getelements.elements.stripe.model.PaymentIntentSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
+import dev.getelements.elements.stripe.model.PostingOutcome;
+import dev.getelements.elements.stripe.model.PostingRecord;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
 import dev.getelements.elements.stripe.model.StripeMode;
@@ -85,6 +87,7 @@ public class StripeServiceImpl implements StripeService {
     private final StripeMeterPriceCache meterPriceCache;
     private final Provider<UserService> userServiceProvider;
     private final Provider<Transaction> transactionProvider;
+    private final MeterPostingService postingService;
 
     @Inject
     public StripeServiceImpl(
@@ -93,13 +96,15 @@ public class StripeServiceImpl implements StripeService {
             StripePriceCache priceCache,
             StripeMeterPriceCache meterPriceCache,
             Provider<UserService> userServiceProvider,
-            Provider<Transaction> transactionProvider) {
+            Provider<Transaction> transactionProvider,
+            MeterPostingService postingService) {
         this.gateway = gateway;
         this.configService = configService;
         this.priceCache = priceCache;
         this.meterPriceCache = meterPriceCache;
         this.userServiceProvider = userServiceProvider;
         this.transactionProvider = transactionProvider;
+        this.postingService = postingService;
     }
 
     @Override
@@ -842,8 +847,14 @@ public class StripeServiceImpl implements StripeService {
                     .build();
 
             gateway.createMeterEvent(params, idempotencyKey, mode);
+            recordPostingQuietly(idempotencyKey, customerId, eventName, value, PostingOutcome.POSTED, mode, null);
 
         } catch (StripeException e) {
+            final var detail = e.getMessage() != null ? e.getMessage()
+                    : e.getStripeError() != null && e.getStripeError().getMessage() != null
+                            ? e.getStripeError().getMessage()
+                            : "Stripe error: " + e.getClass().getSimpleName();
+            recordPostingQuietly(idempotencyKey, customerId, eventName, value, PostingOutcome.FAILED, mode, detail);
             if (isNoSuchMeterError(e)) {
                 final var error = e.getStripeError();
                 final var message = e.getMessage() != null
@@ -858,6 +869,8 @@ public class StripeServiceImpl implements StripeService {
             // error parser expects (see StripeMalformedResponseException for the full mechanism).
             // Without this catch, that exception propagates with zero context — not even which
             // event_name failed — making it effectively undiagnosable in logs.
+            recordPostingQuietly(idempotencyKey, customerId, eventName, value, PostingOutcome.FAILED, mode,
+                    "Unparseable Stripe response: " + e.getClass().getSimpleName());
             throw new StripeMalformedResponseException(
                     "recordMeterEvent(eventName='" + eventName + "', mode=" + mode + ") received a Stripe " +
                             "response this stripe-java version could not parse (" + e.getClass().getSimpleName() +
@@ -865,6 +878,30 @@ public class StripeServiceImpl implements StripeService {
                             "active meter in the target account — verify a meter with this exact event name " +
                             "exists and is active in Stripe's " + mode + " dashboard.",
                     e);
+        }
+    }
+
+    /**
+     * Writes the posting-record entry for a meter-event attempt made through
+     * {@link #recordMeterEvent}. Posting outcomes are recorded here automatically — callers only
+     * need to record decisions that never reach this method (skips). A ledger failure is logged
+     * and swallowed: the posting itself already succeeded or failed on its own terms, and the
+     * caller's outcome must not depend on observability-store availability.
+     */
+    private void recordPostingQuietly(
+            String idempotencyKey,
+            String customerId,
+            String eventName,
+            BigDecimal value,
+            PostingOutcome outcome,
+            StripeMode mode,
+            String detail) {
+        try {
+            postingService.recordPostingOutcome(new PostingRecord(
+                    idempotencyKey, customerId, eventName, value, outcome, mode, detail, null));
+        } catch (RuntimeException e) {
+            System.getLogger(StripeServiceImpl.class.getName()).log(System.Logger.Level.WARNING,
+                    "Failed to record posting outcome " + outcome + " for " + idempotencyKey, e);
         }
     }
 

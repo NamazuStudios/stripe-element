@@ -28,6 +28,10 @@ public class StripePaymentIntentIT {
         Stripe.apiKey = apiKey;
     }
 
+    private static MeterPostingServiceStub postingServiceStub() {
+        return new MeterPostingServiceStub();
+    }
+
     private static StripeServiceImpl service() {
         final UserService userService = mock(UserService.class);
         final var user = mock(User.class);
@@ -35,7 +39,7 @@ public class StripePaymentIntentIT {
         when(userService.getCurrentUser()).thenReturn(user);
         final Transaction transaction = mock(Transaction.class);
         doAnswer(inv -> null).when(transaction).performAndCloseV(any());
-        return new StripeServiceImpl(new LiveStripeGateway(), new StripeConfigServiceStub(), mock(StripePriceCache.class), mock(StripeMeterPriceCache.class), () -> userService, () -> transaction);
+        return new StripeServiceImpl(new LiveStripeGateway(), new StripeConfigServiceStub(), mock(StripePriceCache.class), mock(StripeMeterPriceCache.class), () -> userService, () -> transaction, postingServiceStub());
     }
 
     @Test

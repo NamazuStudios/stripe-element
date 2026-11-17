@@ -7,10 +7,15 @@ import dev.getelements.elements.stripe.model.StripeMode;
 
 /**
  * The posting-record store: a shared, queryable ledger of what each billing meter-event posting
- * attempt actually did. Consumer elements call {@link #recordPostingOutcome} at each
- * reconciliation decision point (posted / skipped-exempt / skipped-no-customer / failed /
- * recovered), through this exported service, so every billing-capable element feeds the same
- * store and an admin can verify billing from one place.
+ * attempt actually did, so billing verification never depends on pod logs or manual Stripe
+ * dashboard hunts.
+ *
+ * <p><strong>Division of responsibility:</strong> postings that flow through
+ * {@link StripeService#recordMeterEvent} — POSTED and FAILED — are recorded automatically by
+ * this element, including the Stripe mode and the Stripe-side {@code identifier}. Consumer
+ * elements only call {@link #recordPostingOutcome} for the decisions that never reach that
+ * method: skips (exempt org, no customer attached yet) and any post-hoc corrections. This keeps
+ * the caller's boilerplate to a minimum while the ledger still captures the full picture.
  *
  * <p>This ledger is the identifier-level record of what <em>we</em> decided to post. Stripe's
  * API exposes no listing of raw meter events, so Stripe-side confirmation is done at the
@@ -20,10 +25,11 @@ import dev.getelements.elements.stripe.model.StripeMode;
 public interface MeterPostingService {
 
     /**
-     * Records one posting decision. Called by consumer elements at the moment the decision is
-     * made; the store stamps {@code at} if the record leaves it unset. Append-only — retries
-     * of the same identifier record their own entry (e.g. {@code FAILED} followed by
-     * {@code RECOVERED_STALE_PENDING}), which is the point: the ledger shows the history.
+     * Records one posting decision. Consumer elements call this at decision points that do not
+     * flow through {@link StripeService#recordMeterEvent} (which records POSTED/FAILED itself) —
+     * i.e. skips and post-hoc corrections. The store stamps {@code at} if the record leaves it
+     * unset. Append-only — retries of the same identifier record their own entry, which is the
+     * point: the ledger shows the history.
      *
      * @param record the decision to persist
      */

@@ -25,7 +25,10 @@ import dev.getelements.elements.stripe.model.CreateCheckoutSessionRequest;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
+import dev.getelements.elements.stripe.model.PostingOutcome;
+import dev.getelements.elements.stripe.model.PostingRecord;
 import dev.getelements.elements.stripe.model.StripeMode;
+import dev.getelements.elements.stripe.service.MeterPostingService;
 import dev.getelements.elements.sdk.dao.ReceiptDao;
 import dev.getelements.elements.sdk.dao.Transaction;
 import dev.getelements.elements.sdk.model.receipt.Receipt;
@@ -69,12 +72,13 @@ class StripeServiceImplTest {
     @Mock private Provider<Transaction> transactionProvider;
     @Mock private Transaction transaction;
     @Mock private ReceiptDao receiptDao;
+    @Mock private MeterPostingService postingService;
 
     private StripeServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new StripeServiceImpl(gateway, configService, priceCache, meterPriceCache, () -> userService, transactionProvider);
+        service = new StripeServiceImpl(gateway, configService, priceCache, meterPriceCache, () -> userService, transactionProvider, postingService);
         lenient().when(configService.resolveDefaultMode()).thenReturn(StripeMode.PRODUCTION);
         final var user = mock(User.class);
         lenient().when(user.getId()).thenReturn("user_test_001");
@@ -337,6 +341,49 @@ class StripeServiceImplTest {
         verify(gateway).createMeterEvent(captor.capture(), eq("idem-key-frac"), any());
 
         assertEquals("0.25", captor.getValue().getPayload().get("value"));
+    }
+
+    @Test
+    void recordMeterEvent_success_autoRecordsPostedOutcome() throws StripeException {
+        service.recordMeterEvent("cus_test", "api_requests", new java.math.BigDecimal("0.25"), "idem-key-auto");
+
+        final var captor = ArgumentCaptor.forClass(PostingRecord.class);
+        verify(postingService).recordPostingOutcome(captor.capture());
+
+        final var record = captor.getValue();
+        assertEquals("idem-key-auto", record.identifier());
+        assertEquals("cus_test", record.customerId());
+        assertEquals("api_requests", record.eventName());
+        assertEquals(new java.math.BigDecimal("0.25"), record.quantity());
+        assertEquals(PostingOutcome.POSTED, record.outcome());
+        assertEquals(StripeMode.PRODUCTION, record.mode());
+        assertNull(record.detail());
+    }
+
+    @Test
+    void recordMeterEvent_failure_autoRecordsFailedOutcome_andStillThrows() throws StripeException {
+        when(gateway.createMeterEvent(any(), any(), any())).thenThrow(mock(StripeException.class));
+
+        assertThrows(InternalServerErrorException.class,
+                () -> service.recordMeterEvent("cus_test", "api_requests", java.math.BigDecimal.ONE, "idem-key-fail"));
+
+        final var captor = ArgumentCaptor.forClass(PostingRecord.class);
+        verify(postingService).recordPostingOutcome(captor.capture());
+
+        final var record = captor.getValue();
+        assertEquals("idem-key-fail", record.identifier());
+        assertEquals(PostingOutcome.FAILED, record.outcome());
+        assertNotNull(record.detail());
+    }
+
+    @Test
+    void recordMeterEvent_postingStoreFailure_doesNotFailThePosting() throws StripeException {
+        doThrow(new RuntimeException("ledger down"))
+                .when(postingService).recordPostingOutcome(any());
+
+        assertDoesNotThrow(() ->
+                service.recordMeterEvent("cus_test", "api_requests", java.math.BigDecimal.ONE, "idem-key-ok"));
+        verify(gateway).createMeterEvent(any(), any(), any());
     }
 
     @Test

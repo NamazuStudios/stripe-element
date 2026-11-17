@@ -406,6 +406,11 @@ public interface StripeService {
      * @param value          usage quantity to report, e.g. {@code 0.25} (must be &gt; 0)
      * @param idempotencyKey unique key for this event; re-submitting the same key is a no-op
      * @throws NoSuchMeterException if Stripe has no active meter configured for {@code eventName}
+     *
+     * The attempt is recorded to the posting-record store automatically: POSTED on success,
+     * FAILED on error (with the Stripe mode and this key as the ledger identifier). Callers
+     * only need to record decisions that never reach this method (skips) via
+     * {@link dev.getelements.elements.stripe.service.MeterPostingService}.
      */
     default void recordMeterEvent(String customerId, String eventName, BigDecimal value, String idempotencyKey) {
         recordMeterEvent(customerId, eventName, value, idempotencyKey, defaultMode());
