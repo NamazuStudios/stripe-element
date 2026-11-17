@@ -4,9 +4,12 @@ import dev.getelements.elements.stripe.model.CreateCheckoutSessionRequest;
 import dev.getelements.elements.stripe.model.CreateCheckoutSessionResponse;
 import dev.getelements.elements.stripe.model.CreateCustomerResponse;
 import dev.getelements.elements.stripe.model.CreateSubscriptionRequest;
+import dev.getelements.elements.stripe.model.ChargeSummary;
 import dev.getelements.elements.stripe.model.CustomerListResponse;
 import dev.getelements.elements.stripe.model.CustomerSummary;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
+import dev.getelements.elements.stripe.model.PaymentIntentSummary;
+import dev.getelements.elements.stripe.model.UpcomingInvoiceSummary;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentRequest;
 import dev.getelements.elements.stripe.model.CreatePaymentIntentResponse;
 import dev.getelements.elements.stripe.model.CreateSetupIntentResponse;
@@ -452,6 +455,53 @@ public interface StripeService {
 
     /** Mode-aware variant of {@link #listInvoices(String, int, String)}. */
     List<InvoiceSummary> listInvoices(String customerId, int limit, String startingAfter, StripeMode mode);
+
+    /**
+     * Lists charges against the given Stripe customer, newest first — the ground truth of
+     * money movement for one-time purchases. Includes succeeded and failed charges, with
+     * refund state and the Stripe-hosted receipt URL.
+     *
+     * @param customerId    Stripe customer ID
+     * @param limit         maximum results to return (1–100)
+     * @param startingAfter charge ID cursor for the next page; {@code null} for the first page
+     */
+    default List<ChargeSummary> listCharges(String customerId, int limit, String startingAfter) {
+        return listCharges(customerId, limit, startingAfter, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listCharges(String, int, String)}. */
+    List<ChargeSummary> listCharges(String customerId, int limit, String startingAfter, StripeMode mode);
+
+    /**
+     * Previews the customer's <strong>next invoice</strong> — the point where metered usage
+     * becomes money: pending meter events for the current period appear as usage line items.
+     * Returns {@link Optional#empty()} when the customer has nothing pending (no subscription
+     * and no usage against a metered price); that is a normal state, not an error.
+     *
+     * @param customerId Stripe customer ID
+     */
+    default java.util.Optional<UpcomingInvoiceSummary> getUpcomingInvoice(String customerId) {
+        return getUpcomingInvoice(customerId, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #getUpcomingInvoice(String)}. */
+    java.util.Optional<UpcomingInvoiceSummary> getUpcomingInvoice(String customerId, StripeMode mode);
+
+    /**
+     * Lists PaymentIntents for the given Stripe customer, newest first. Unlike
+     * {@link #listCharges}, this includes attempts that never produced a charge (failed,
+     * requires-payment-method, canceled) — the right view for debugging failed purchases.
+     *
+     * @param customerId    Stripe customer ID
+     * @param limit         maximum results to return (1–100)
+     * @param startingAfter intent ID cursor for the next page; {@code null} for the first page
+     */
+    default List<PaymentIntentSummary> listPaymentIntents(String customerId, int limit, String startingAfter) {
+        return listPaymentIntents(customerId, limit, startingAfter, defaultMode());
+    }
+
+    /** Mode-aware variant of {@link #listPaymentIntents(String, int, String)}. */
+    List<PaymentIntentSummary> listPaymentIntents(String customerId, int limit, String startingAfter, StripeMode mode);
 
     /**
      * Records a receipt for a confirmed payment in the platform receipt store. Called internally

@@ -7,6 +7,10 @@ import com.stripe.model.CustomerCollection;
 import com.stripe.model.CustomerSearchResult;
 import com.stripe.model.Invoice;
 import com.stripe.model.InvoiceCollection;
+import com.stripe.model.Charge;
+import com.stripe.model.ChargeCollection;
+import com.stripe.model.PaymentIntent;
+import com.stripe.model.PaymentIntentCollection;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethodCollection;
 import com.stripe.model.Price;
@@ -23,12 +27,15 @@ import com.stripe.model.billing.MeterEventSummary;
 import com.stripe.model.billing.MeterEventSummaryCollection;
 import com.stripe.model.billingportal.Session;
 import com.stripe.net.RequestOptions;
+import com.stripe.param.ChargeListParams;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerListParams;
 import com.stripe.param.CustomerListPaymentMethodsParams;
 import com.stripe.param.CustomerSearchParams;
 import com.stripe.param.CustomerUpdateParams;
 import com.stripe.param.InvoiceListParams;
+import com.stripe.param.InvoiceUpcomingParams;
+import com.stripe.param.PaymentIntentListParams;
 import com.stripe.param.PaymentIntentCreateParams;
 import com.stripe.param.PriceListParams;
 import com.stripe.param.ProductListParams;
@@ -149,6 +156,21 @@ public class DefaultStripeGateway implements StripeGateway {
     @Override
     public CustomerCollection listCustomers(CustomerListParams params, StripeMode mode) throws StripeException {
         return Customer.list(params, options(mode));
+    }
+
+    @Override
+    public ChargeCollection listCharges(ChargeListParams params, StripeMode mode) throws StripeException {
+        return Charge.list(params, options(mode));
+    }
+
+    @Override
+    public Invoice retrieveUpcomingInvoice(InvoiceUpcomingParams params, StripeMode mode) throws StripeException {
+        return Invoice.upcoming(params, options(mode));
+    }
+
+    @Override
+    public PaymentIntentCollection listPaymentIntents(PaymentIntentListParams params, StripeMode mode) throws StripeException {
+        return PaymentIntent.list(params, options(mode));
     }
 
     @Override

@@ -1,12 +1,16 @@
 package dev.getelements.elements.stripe.service;
 
+import com.stripe.exception.InvalidRequestException;
 import com.stripe.exception.StripeException;
+import com.stripe.model.Charge;
+import com.stripe.model.ChargeCollection;
 import com.stripe.model.Customer;
 import com.stripe.model.CustomerCollection;
 import com.stripe.model.CustomerSearchResult;
 import com.stripe.model.Invoice;
 import com.stripe.model.InvoiceCollection;
 import com.stripe.model.PaymentIntent;
+import com.stripe.model.PaymentIntentCollection;
 import com.stripe.model.Price;
 import com.stripe.model.PriceCollection;
 import com.stripe.model.Subscription;
@@ -848,6 +852,124 @@ class StripeServiceImplTest {
 
         assertThrows(InternalServerErrorException.class,
                 () -> service.updateCustomer("cus_test", "x@x.com", "X"));
+    }
+
+    // --- listCharges / getUpcomingInvoice / listPaymentIntents ---
+
+    @Test
+    void listCharges_mapsSummariesCorrectly() throws StripeException {
+        final var charge = mock(Charge.class);
+        when(charge.getId()).thenReturn("ch_001");
+        when(charge.getPaymentIntent()).thenReturn("pi_001");
+        when(charge.getAmount()).thenReturn(1500L);
+        when(charge.getAmountRefunded()).thenReturn(500L);
+        when(charge.getCurrency()).thenReturn("usd");
+        when(charge.getStatus()).thenReturn("succeeded");
+        when(charge.getDescription()).thenReturn("Gem pack");
+        when(charge.getReceiptUrl()).thenReturn("https://pay.stripe.com/receipts/1");
+        when(charge.getRefunded()).thenReturn(false);
+        when(charge.getCreated()).thenReturn(1700000000L);
+        final var collection = mock(ChargeCollection.class);
+        when(collection.getData()).thenReturn(List.of(charge));
+        when(gateway.listCharges(any(), any())).thenReturn(collection);
+
+        final var result = service.listCharges("cus_test", 10, null);
+
+        assertEquals(1, result.size());
+        final var summary = result.getFirst();
+        assertEquals("ch_001", summary.id());
+        assertEquals("pi_001", summary.paymentIntentId());
+        assertEquals(1500L, summary.amount());
+        assertEquals(500L, summary.refundedAmount());
+        assertEquals("succeeded", summary.status());
+        assertEquals("https://pay.stripe.com/receipts/1", summary.receiptUrl());
+        assertFalse(summary.refunded());
+        assertEquals(Instant.ofEpochSecond(1700000000L).toString(), summary.created());
+
+        verify(gateway).listCharges(argThat(p ->
+                "cus_test".equals(p.getCustomer()) && p.getLimit() == 10L), any());
+    }
+
+    @Test
+    void listCharges_fullyRefunded_flagSet() throws StripeException {
+        final var charge = mock(Charge.class);
+        when(charge.getId()).thenReturn("ch_002");
+        when(charge.getRefunded()).thenReturn(true);
+        final var collection = mock(ChargeCollection.class);
+        when(collection.getData()).thenReturn(List.of(charge));
+        when(gateway.listCharges(any(), any())).thenReturn(collection);
+
+        assertTrue(service.listCharges("cus_test", 10, null).getFirst().refunded());
+    }
+
+    @Test
+    void getUpcomingInvoice_mapsTotalAndLines() throws StripeException {
+        final var line = mock(com.stripe.model.InvoiceLineItem.class);
+        when(line.getDescription()).thenReturn("1 × API Requests (at $0.01 / request)");
+        when(line.getAmount()).thenReturn(1250L);
+        when(line.getQuantity()).thenReturn(1250L);
+        when(line.getType()).thenReturn("invoiceitem");
+        final var lineCollection = mock(com.stripe.model.InvoiceLineItemCollection.class);
+        when(lineCollection.getData()).thenReturn(List.of(line));
+        final var invoice = mock(Invoice.class);
+        when(invoice.getLines()).thenReturn(lineCollection);
+        when(invoice.getTotal()).thenReturn(1250L);
+        when(invoice.getCurrency()).thenReturn("usd");
+        when(invoice.getPeriodStart()).thenReturn(1700000000L);
+        when(invoice.getPeriodEnd()).thenReturn(1700086400L);
+        when(gateway.retrieveUpcomingInvoice(any(), any())).thenReturn(invoice);
+
+        final var result = service.getUpcomingInvoice("cus_test");
+
+        assertTrue(result.isPresent());
+        assertEquals(1250L, result.get().total());
+        assertEquals("usd", result.get().currency());
+        assertEquals(1, result.get().lines().size());
+        assertEquals(1250L, result.get().lines().getFirst().quantity());
+        verify(gateway).retrieveUpcomingInvoice(argThat(p -> "cus_test".equals(p.getCustomer())), any());
+    }
+
+    @Test
+    void getUpcomingInvoice_404_returnsEmpty() throws StripeException {
+        final var e = mock(InvalidRequestException.class);
+        when(e.getStatusCode()).thenReturn(404);
+        when(gateway.retrieveUpcomingInvoice(any(), any())).thenThrow(e);
+
+        assertTrue(service.getUpcomingInvoice("cus_test").isEmpty());
+    }
+
+    @Test
+    void getUpcomingInvoice_otherInvalidRequest_wrapsAsBadRequest() throws StripeException {
+        final var e = mock(InvalidRequestException.class);
+        when(e.getStatusCode()).thenReturn(400);
+        when(gateway.retrieveUpcomingInvoice(any(), any())).thenThrow(e);
+
+        assertThrows(BadRequestException.class, () -> service.getUpcomingInvoice("cus_test"));
+    }
+
+    @Test
+    void listPaymentIntents_mapsSummariesCorrectly() throws StripeException {
+        final var intent = mock(PaymentIntent.class);
+        when(intent.getId()).thenReturn("pi_002");
+        when(intent.getAmount()).thenReturn(2500L);
+        when(intent.getCurrency()).thenReturn("usd");
+        when(intent.getStatus()).thenReturn("requires_payment_method");
+        when(intent.getDescription()).thenReturn("Gem pack");
+        when(intent.getCreated()).thenReturn(1700000000L);
+        final var collection = mock(PaymentIntentCollection.class);
+        when(collection.getData()).thenReturn(List.of(intent));
+        when(gateway.listPaymentIntents(any(), any())).thenReturn(collection);
+
+        final var result = service.listPaymentIntents("cus_test", 10, null);
+
+        assertEquals(1, result.size());
+        final var summary = result.getFirst();
+        assertEquals("pi_002", summary.id());
+        assertEquals("requires_payment_method", summary.status());
+        assertEquals(2500L, summary.amount());
+
+        verify(gateway).listPaymentIntents(argThat(p ->
+                "cus_test".equals(p.getCustomer()) && p.getLimit() == 10L), any());
     }
 
     // --- listMeterUsage ---

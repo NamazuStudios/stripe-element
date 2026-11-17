@@ -4,10 +4,13 @@ import com.google.inject.Inject;
 import com.stripe.exception.InvalidRequestException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
+import com.stripe.param.ChargeListParams;
 import com.stripe.param.CustomerSearchParams;
 import com.stripe.param.CustomerUpdateParams;
 import com.stripe.param.CustomerListParams;
 import com.stripe.param.InvoiceListParams;
+import com.stripe.param.InvoiceUpcomingParams;
+import com.stripe.param.PaymentIntentListParams;
 import com.stripe.param.PriceListParams;
 import com.stripe.param.ProductListParams;
 import com.stripe.param.SubscriptionCreateParams;
@@ -25,6 +28,7 @@ import dev.getelements.elements.sdk.dao.ReceiptDao;
 import dev.getelements.elements.sdk.dao.Transaction;
 import dev.getelements.elements.sdk.model.receipt.Receipt;
 import dev.getelements.elements.sdk.service.user.UserService;
+import dev.getelements.elements.stripe.model.ChargeSummary;
 import dev.getelements.elements.stripe.model.CreateCheckoutSessionRequest;
 import dev.getelements.elements.stripe.model.CreateCheckoutSessionResponse;
 import dev.getelements.elements.stripe.model.CreateCustomerResponse;
@@ -37,12 +41,14 @@ import dev.getelements.elements.stripe.model.CustomerSummary;
 import dev.getelements.elements.stripe.model.InvoiceSummary;
 import dev.getelements.elements.stripe.model.MeterSummary;
 import dev.getelements.elements.stripe.model.MeterUsageSummary;
+import dev.getelements.elements.stripe.model.PaymentIntentSummary;
 import dev.getelements.elements.stripe.model.PaymentMethodSummary;
 import dev.getelements.elements.stripe.model.PriceSummary;
 import dev.getelements.elements.stripe.model.ProductSummary;
 import dev.getelements.elements.stripe.model.StripeMode;
 import dev.getelements.elements.stripe.model.SubscriptionListResponse;
 import dev.getelements.elements.stripe.model.SubscriptionStatusResponse;
+import dev.getelements.elements.stripe.model.UpcomingInvoiceSummary;
 import jakarta.inject.Provider;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -719,6 +725,103 @@ public class StripeServiceImpl implements StripeService {
                             inv.getCurrency(),
                             inv.getStatus(),
                             Instant.ofEpochSecond(inv.getCreated()).toString()))
+                    .toList();
+
+        } catch (StripeException e) {
+            throw stripeError(e);
+        }
+    }
+
+    @Override
+    public List<ChargeSummary> listCharges(String customerId, int limit, String startingAfter, StripeMode mode) {
+
+        try {
+
+            final var builder = ChargeListParams.builder()
+                    .setCustomer(customerId)
+                    .setLimit((long) limit);
+
+            if (startingAfter != null && !startingAfter.isBlank()) {
+                builder.setStartingAfter(startingAfter);
+            }
+
+            return gateway.listCharges(builder.build(), mode).getData().stream()
+                    .map(ch -> new ChargeSummary(
+                            ch.getId(),
+                            ch.getPaymentIntent(),
+                            ch.getAmount(),
+                            ch.getAmountRefunded(),
+                            ch.getCurrency(),
+                            ch.getStatus(),
+                            ch.getDescription(),
+                            ch.getReceiptUrl(),
+                            Boolean.TRUE.equals(ch.getRefunded()),
+                            ch.getCreated() != null ? Instant.ofEpochSecond(ch.getCreated()).toString() : null))
+                    .toList();
+
+        } catch (StripeException e) {
+            throw stripeError(e);
+        }
+    }
+
+    @Override
+    public Optional<UpcomingInvoiceSummary> getUpcomingInvoice(String customerId, StripeMode mode) {
+
+        try {
+
+            final var params = InvoiceUpcomingParams.builder()
+                    .setCustomer(customerId)
+                    .build();
+
+            final var invoice = gateway.retrieveUpcomingInvoice(params, mode);
+
+            final var lines = invoice.getLines().getData().stream()
+                    .map(line -> new UpcomingInvoiceSummary.UpcomingInvoiceLine(
+                            line.getDescription(),
+                            line.getAmount() != null ? line.getAmount() : 0L,
+                            line.getQuantity(),
+                            line.getType()))
+                    .toList();
+
+            return Optional.of(new UpcomingInvoiceSummary(
+                    invoice.getTotal(),
+                    invoice.getCurrency(),
+                    invoice.getPeriodStart() != null ? Instant.ofEpochSecond(invoice.getPeriodStart()).toString() : null,
+                    invoice.getPeriodEnd() != null ? Instant.ofEpochSecond(invoice.getPeriodEnd()).toString() : null,
+                    lines));
+
+        } catch (InvalidRequestException e) {
+            // No upcoming invoice is a normal state — no subscription and no pending usage.
+            if (e.getStatusCode() != null && e.getStatusCode() == 404) {
+                return Optional.empty();
+            }
+            throw stripeError(e);
+        } catch (StripeException e) {
+            throw stripeError(e);
+        }
+    }
+
+    @Override
+    public List<PaymentIntentSummary> listPaymentIntents(String customerId, int limit, String startingAfter, StripeMode mode) {
+
+        try {
+
+            final var builder = PaymentIntentListParams.builder()
+                    .setCustomer(customerId)
+                    .setLimit((long) limit);
+
+            if (startingAfter != null && !startingAfter.isBlank()) {
+                builder.setStartingAfter(startingAfter);
+            }
+
+            return gateway.listPaymentIntents(builder.build(), mode).getData().stream()
+                    .map(pi -> new PaymentIntentSummary(
+                            pi.getId(),
+                            pi.getAmount(),
+                            pi.getCurrency(),
+                            pi.getStatus(),
+                            pi.getDescription(),
+                            pi.getCreated() != null ? Instant.ofEpochSecond(pi.getCreated()).toString() : null))
                     .toList();
 
         } catch (StripeException e) {

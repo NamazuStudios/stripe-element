@@ -164,78 +164,127 @@
       saving ? "Saving…" : "Save Configuration"
     )));
   }
-  const STATUS_OPTIONS = [
-    { value: "", label: "All (non-canceled)" },
-    { value: "all", label: "All (including canceled)" },
-    { value: "active", label: "Active" },
-    { value: "trialing", label: "Trialing" },
-    { value: "past_due", label: "Past due" },
-    { value: "unpaid", label: "Unpaid" },
-    { value: "paused", label: "Paused" },
-    { value: "canceled", label: "Canceled" }
-  ];
-  const STATUS_STYLES = {
+  const MODES$1 = ["production", "sandbox"];
+  const USAGE_DAYS$1 = 7;
+  const CHARGE_STATUS_STYLES = {
+    succeeded: "bg-green-500/10 text-green-700 dark:text-green-400",
+    failed: "bg-destructive/10 text-destructive",
+    pending: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-500"
+  };
+  const INTENT_STATUS_STYLES = {
+    succeeded: "bg-green-500/10 text-green-700 dark:text-green-400",
+    canceled: "bg-muted text-muted-foreground"
+  };
+  const SUB_STATUS_STYLES = {
     active: "bg-green-500/10 text-green-700 dark:text-green-400",
     trialing: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
     past_due: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-500",
-    unpaid: "bg-orange-500/10 text-orange-700 dark:text-orange-400",
-    canceled: "bg-muted text-muted-foreground",
-    incomplete: "bg-muted text-muted-foreground",
-    incomplete_expired: "bg-muted text-muted-foreground",
-    paused: "bg-muted text-muted-foreground"
+    canceled: "bg-muted text-muted-foreground"
   };
+  function formatMoney(amount, currency) {
+    if (amount == null) return "—";
+    try {
+      return new Intl.NumberFormat("en-US", { style: "currency", currency: currency ?? "USD" }).format(amount / 100);
+    } catch {
+      return `${amount / 100} ${currency ?? ""}`;
+    }
+  }
+  function Badge({ value, styles }) {
+    return /* @__PURE__ */ React.createElement("span", { className: `inline-block rounded px-2 py-0.5 text-xs font-medium ${styles[value ?? ""] ?? "bg-muted text-muted-foreground"}` }, value ?? "—");
+  }
+  function SectionHeading({ children }) {
+    return /* @__PURE__ */ React.createElement("h2", { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2" }, children);
+  }
   function StripeBillingPlugin() {
+    const limit = defaultLimit();
     const [customerId, setCustomerId] = React.useState("");
-    const [status, setStatus] = React.useState("");
-    const [limit, setLimit] = React.useState(defaultLimit());
-    const [rows, setRows] = React.useState(null);
-    const [hasMore, setHasMore] = React.useState(false);
-    const [nextCursor, setNextCursor] = React.useState(null);
+    const [mode, setMode] = React.useState("production");
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState(null);
+    const [searched, setSearched] = React.useState(false);
+    const [paymentMethods, setPaymentMethods] = React.useState(null);
+    const [upcoming, setUpcoming] = React.useState(null);
+    const [charges, setCharges] = React.useState(null);
+    const [invoices, setInvoices] = React.useState(null);
+    const [intents, setIntents] = React.useState(null);
+    const [usage, setUsage] = React.useState(null);
+    const [subscriptions, setSubscriptions] = React.useState(null);
     const [portalLoading, setPortalLoading] = React.useState(false);
     const [portalUrl, setPortalUrl] = React.useState(null);
-    const [portalError, setPortalError] = React.useState(null);
     const [copied, setCopied] = React.useState(false);
-    async function fetchPage(startingAfter, append) {
+    async function fetchBilling(selectedMode, id) {
+      const headers = { ...sessionHeaders(), "X-Stripe-Mode": selectedMode };
+      const enc = encodeURIComponent(id.trim());
+      async function getJson(path) {
+        const res = await fetch(path, { credentials: "include", headers });
+        return res.ok ? res.json() : null;
+      }
+      async function fetchUsage() {
+        const meters = await getJson("/element/stripe/api/stripe/meters?active=true&limit=100");
+        if (!(meters == null ? void 0 : meters.length)) return {};
+        const end = /* @__PURE__ */ new Date();
+        const start = new Date(end.getTime() - USAGE_DAYS$1 * 24 * 3600 * 1e3);
+        const range = `&start=${start.toISOString().slice(0, 17)}00Z&end=${end.toISOString().slice(0, 17)}00Z`;
+        const totals = {};
+        await Promise.all(meters.map(async (m) => {
+          const events = await getJson(
+            `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${enc}${range}`
+          );
+          if (events) {
+            totals[m.eventName] = events.reduce((sum, s) => sum + parseFloat(s.aggregatedValue ?? "0"), 0);
+          }
+        }));
+        return totals;
+      }
+      const [methods, upcomingInvoice, chargeList, invoiceList, intentList, usageTotals, subs] = await Promise.all([
+        getJson(`/element/stripe/api/stripe/customer/${enc}/payment-methods`),
+        getJson(`/element/stripe/api/stripe/customer/${enc}/upcoming-invoice`),
+        // null (204) = nothing scheduled
+        getJson(`/element/stripe/api/stripe/customer/${enc}/charges?limit=${Math.min(limit, 100)}`),
+        getJson(`/element/stripe/api/stripe/customer/${enc}/invoices?limit=${Math.min(limit, 100)}`),
+        getJson(`/element/stripe/api/stripe/customer/${enc}/payment-intents?limit=${Math.min(limit, 100)}`),
+        fetchUsage(),
+        getJson(`/element/stripe/api/stripe/customer/${enc}/subscriptions?limit=5`).then((r) => (r == null ? void 0 : r.subscriptions) ?? null)
+      ]);
+      setPaymentMethods(methods);
+      setUpcoming(upcomingInvoice ?? "none");
+      setCharges(chargeList);
+      setInvoices(invoiceList);
+      setIntents(intentList);
+      setUsage(usageTotals);
+      setSubscriptions(subs);
+    }
+    async function handleSearch(e) {
+      e.preventDefault();
+      if (!customerId.trim()) return;
       setLoading(true);
       setError(null);
+      setSearched(false);
+      setPortalUrl(null);
       try {
-        const params = new URLSearchParams({ limit: String(limit) });
-        if (status) params.set("status", status);
-        if (startingAfter) params.set("startingAfter", startingAfter);
-        const url = `/element/stripe/api/stripe/customer/${encodeURIComponent(customerId.trim())}/subscriptions?${params}`;
-        const res = await fetch(url, { credentials: "include", headers: sessionHeaders() });
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        const data = await res.json();
-        setRows(append ? (prev) => [...prev ?? [], ...data.subscriptions] : data.subscriptions);
-        setHasMore(data.hasMore);
-        setNextCursor(data.nextCursor);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        await fetchBilling(mode, customerId);
+        setSearched(true);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
     }
-    function handleSearch(e) {
-      e.preventDefault();
-      if (!customerId.trim()) return;
-      setPortalUrl(null);
-      fetchPage(null, false);
-    }
     async function handleGetPortalLink() {
       setPortalLoading(true);
-      setPortalError(null);
+      setError(null);
       setPortalUrl(null);
       setCopied(false);
       try {
-        const url = `/element/stripe/api/stripe/customer/${encodeURIComponent(customerId.trim())}/portal-session`;
-        const res = await fetch(url, { method: "POST", credentials: "include", headers: sessionHeaders() });
+        const res = await fetch(`/element/stripe/api/stripe/customer/${encodeURIComponent(customerId.trim())}/portal-session`, {
+          method: "POST",
+          credentials: "include",
+          headers: { ...sessionHeaders(), "X-Stripe-Mode": mode }
+        });
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        const data = await res.json();
-        setPortalUrl(data.url);
-      } catch (e) {
-        setPortalError(e instanceof Error ? e.message : String(e));
+        setPortalUrl((await res.json()).url);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
       } finally {
         setPortalLoading(false);
       }
@@ -247,32 +296,26 @@
         setTimeout(() => setCopied(false), 2e3);
       });
     }
-    const limitOptions = Array.from(/* @__PURE__ */ new Set([10, 25, 50, defaultLimit()])).sort((a, b) => a - b);
-    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-3xl" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Billing"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Look up subscriptions and manage billing for a Stripe customer ID."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSearch, className: "flex flex-wrap gap-3 mb-4 items-end" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5 flex-1 min-w-48" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Customer ID"), /* @__PURE__ */ React.createElement(
+    const onFile = paymentMethods && paymentMethods.length > 0 ? paymentMethods.filter((m) => m.brand).map((m) => `${m.brand.toUpperCase()} ••${m.last4 ?? ""}`).join(", ") : null;
+    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-5xl" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Billing"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Full billing posture for a customer: charges and payment attempts (one-time purchases), pending metered usage and the upcoming invoice, invoices, and subscriptions."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSearch, className: "flex flex-wrap gap-3 mb-4 items-end" }, /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5 flex-1 min-w-48" }, /* @__PURE__ */ React.createElement("label", { htmlFor: "billing-customer-id", className: "block text-sm font-medium" }, "Customer ID"), /* @__PURE__ */ React.createElement(
       "input",
       {
+        id: "billing-customer-id",
         type: "text",
         value: customerId,
         onChange: (e) => setCustomerId(e.target.value),
-        placeholder: "cus_\\u2026",
+        placeholder: "cus_...",
         className: "w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
       }
-    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Status"), /* @__PURE__ */ React.createElement(
+    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { htmlFor: "billing-mode", className: "block text-sm font-medium" }, "Mode"), /* @__PURE__ */ React.createElement(
       "select",
       {
-        value: status,
-        onChange: (e) => setStatus(e.target.value),
+        id: "billing-mode",
+        value: mode,
+        onChange: (e) => setMode(e.target.value),
         className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       },
-      STATUS_OPTIONS.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.value, value: o.value }, o.label))
-    )), /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { className: "text-sm font-medium" }, "Per page"), /* @__PURE__ */ React.createElement(
-      "select",
-      {
-        value: limit,
-        onChange: (e) => setLimit(Number(e.target.value)),
-        className: "rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-      },
-      limitOptions.map((n) => /* @__PURE__ */ React.createElement("option", { key: n, value: n }, n))
+      MODES$1.map((m) => /* @__PURE__ */ React.createElement("option", { key: m, value: m }, m === "production" ? "Production (live)" : "Sandbox (test)"))
     )), /* @__PURE__ */ React.createElement(
       "button",
       {
@@ -280,7 +323,7 @@
         disabled: loading || !customerId.trim(),
         className: "rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
       },
-      loading && rows === null ? "Searching…" : "Search"
+      loading ? "Searching…" : "Search"
     ), /* @__PURE__ */ React.createElement(
       "button",
       {
@@ -290,7 +333,7 @@
         className: "rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted/40 disabled:opacity-50 transition-colors"
       },
       portalLoading ? "Getting link…" : "Get Portal Link"
-    )), portalError && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, portalError), portalUrl && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border bg-muted/20 p-3 mb-4 flex items-center gap-3" }, /* @__PURE__ */ React.createElement("span", { className: "text-xs font-mono truncate flex-1 text-muted-foreground" }, portalUrl), /* @__PURE__ */ React.createElement(
+    )), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), portalUrl && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border bg-muted/20 p-3 mb-4 flex items-center gap-3" }, /* @__PURE__ */ React.createElement("span", { className: "text-xs font-mono truncate flex-1 text-muted-foreground" }, portalUrl), /* @__PURE__ */ React.createElement(
       "button",
       {
         type: "button",
@@ -298,24 +341,7 @@
         className: "shrink-0 rounded px-2 py-1 text-xs border border-border hover:bg-muted/40 transition-colors"
       },
       copied ? "Copied!" : "Copy"
-    ), /* @__PURE__ */ React.createElement(
-      "a",
-      {
-        href: portalUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
-        className: "shrink-0 rounded px-2 py-1 text-xs border border-border hover:bg-muted/40 transition-colors"
-      },
-      "Open ↗"
-    )), error && /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive mb-4" }, error), rows !== null && (rows.length === 0 ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No subscriptions found.") : /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-hidden mb-4" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Subscription ID"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Status"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Period End"))), /* @__PURE__ */ React.createElement("tbody", null, rows.map((row, i) => /* @__PURE__ */ React.createElement("tr", { key: row.subscriptionId, className: i % 2 === 0 ? "" : "bg-muted/20" }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono" }, row.subscriptionId), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, /* @__PURE__ */ React.createElement("span", { className: `inline-block rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[row.status] ?? "bg-muted text-muted-foreground"}` }, row.status)), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground" }, row.currentPeriodEnd ? new Date(row.currentPeriodEnd).toLocaleDateString() : "—")))))), hasMore && /* @__PURE__ */ React.createElement(
-      "button",
-      {
-        onClick: () => fetchPage(nextCursor, true),
-        disabled: loading,
-        className: "rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted/40 disabled:opacity-50 transition-colors"
-      },
-      loading ? "Loading…" : "Load more"
-    ))));
+    )), searched && customerId.trim() && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6" }, /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mb-1" }, "Payment method"), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, paymentMethods === null ? "—" : onFile ?? "None on file")), /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mb-1" }, "Upcoming invoice"), /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, upcoming === "none" ? "Nothing scheduled" : upcoming ? `${formatMoney(upcoming.total, upcoming.currency)} · due ${upcoming.periodEnd ? new Date(upcoming.periodEnd).toLocaleDateString() : "—"}` : "—"), upcoming && upcoming !== "none" && upcoming.lines.length > 0 && /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mt-1 truncate", title: upcoming.lines.map((l) => l.description ?? "").join("; ") }, upcoming.lines.length, " line item", upcoming.lines.length === 1 ? "" : "s")), /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border p-3" }, /* @__PURE__ */ React.createElement("p", { className: "text-xs text-muted-foreground mb-1" }, "Metered usage, last ", USAGE_DAYS$1, " days"), usage === null ? /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, "—") : Object.keys(usage).length === 0 ? /* @__PURE__ */ React.createElement("p", { className: "text-sm font-medium" }, "No active meters") : Object.entries(usage).map(([event, total]) => /* @__PURE__ */ React.createElement("p", { key: event, className: "text-sm font-medium" }, Number.isInteger(total) ? total : total.toFixed(4), " ", /* @__PURE__ */ React.createElement("span", { className: "text-xs text-muted-foreground font-normal" }, event))))), /* @__PURE__ */ React.createElement("div", { className: "mb-6" }, /* @__PURE__ */ React.createElement(SectionHeading, null, "Charges (one-time purchases)"), charges === null ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "Failed to load.") : charges.length === 0 ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No charges.") : /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Date"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Amount"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Status"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Description"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Charge"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Receipt"))), /* @__PURE__ */ React.createElement("tbody", null, charges.map((ch, i) => /* @__PURE__ */ React.createElement("tr", { key: ch.id, className: i % 2 === 0 ? "" : "bg-muted/20" }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs whitespace-nowrap" }, ch.created ? new Date(ch.created).toLocaleDateString() : "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 whitespace-nowrap" }, formatMoney(ch.amount, ch.currency), ch.refundedAmount > 0 && !ch.refunded && /* @__PURE__ */ React.createElement("span", { className: "text-xs text-orange-600 ml-1" }, "(−", formatMoney(ch.refundedAmount, ch.currency), ")")), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, /* @__PURE__ */ React.createElement(Badge, { value: ch.refunded ? "refunded" : ch.status, styles: { ...CHARGE_STATUS_STYLES, refunded: "bg-orange-500/10 text-orange-600" } })), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs max-w-xs truncate" }, ch.description ?? "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, ch.id), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-xs" }, ch.receiptUrl ? /* @__PURE__ */ React.createElement("a", { href: ch.receiptUrl, target: "_blank", rel: "noreferrer", className: "text-primary hover:underline" }, "Receipt ↗") : "—"))))))), /* @__PURE__ */ React.createElement("div", { className: "mb-6" }, /* @__PURE__ */ React.createElement(SectionHeading, null, "Invoices"), invoices === null ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "Failed to load.") : invoices.length === 0 ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No invoices.") : /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Date"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Amount paid"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Status"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Invoice"))), /* @__PURE__ */ React.createElement("tbody", null, invoices.map((inv, i) => /* @__PURE__ */ React.createElement("tr", { key: inv.id, className: i % 2 === 0 ? "" : "bg-muted/20" }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs whitespace-nowrap" }, new Date(inv.created).toLocaleDateString()), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 whitespace-nowrap" }, formatMoney(inv.amountPaid, inv.currency)), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, /* @__PURE__ */ React.createElement(Badge, { value: inv.status, styles: {} })), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, inv.id))))))), /* @__PURE__ */ React.createElement("div", { className: "mb-6" }, /* @__PURE__ */ React.createElement(SectionHeading, null, "Payment attempts"), intents === null ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "Failed to load.") : intents.length === 0 ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No PaymentIntents.") : /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Date"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Amount"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Status"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Intent"))), /* @__PURE__ */ React.createElement("tbody", null, intents.map((pi, i) => /* @__PURE__ */ React.createElement("tr", { key: pi.id, className: i % 2 === 0 ? "" : "bg-muted/20" }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs whitespace-nowrap" }, pi.created ? new Date(pi.created).toLocaleDateString() : "—"), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 whitespace-nowrap" }, formatMoney(pi.amount, pi.currency)), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, /* @__PURE__ */ React.createElement(Badge, { value: pi.status, styles: INTENT_STATUS_STYLES })), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, pi.id))))))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(SectionHeading, null, "Subscriptions"), subscriptions === null ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "Failed to load.") : subscriptions.length === 0 ? /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "No subscriptions.") : /* @__PURE__ */ React.createElement("div", { className: "rounded-md border border-border overflow-x-auto" }, /* @__PURE__ */ React.createElement("table", { className: "w-full text-sm" }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", { className: "border-b border-border bg-muted/40" }, /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Subscription"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Status"), /* @__PURE__ */ React.createElement("th", { className: "px-4 py-2 text-left font-medium text-muted-foreground" }, "Renews"))), /* @__PURE__ */ React.createElement("tbody", null, subscriptions.map((s, i) => /* @__PURE__ */ React.createElement("tr", { key: s.subscriptionId, className: i % 2 === 0 ? "" : "bg-muted/20" }, /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 font-mono text-xs" }, s.subscriptionId), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2" }, /* @__PURE__ */ React.createElement(Badge, { value: s.status, styles: SUB_STATUS_STYLES })), /* @__PURE__ */ React.createElement("td", { className: "px-4 py-2 text-muted-foreground text-xs" }, s.currentPeriodEnd ? new Date(s.currentPeriodEnd).toLocaleDateString() : "—")))))))));
   }
   const MODES = ["production", "sandbox"];
   const USAGE_DAYS = 7;
