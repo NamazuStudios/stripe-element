@@ -474,7 +474,7 @@
           className: "text-primary hover:underline"
         },
         "Dashboard"
-      ), /* @__PURE__ */ React.createElement("span", { className: "mx-1 text-muted-foreground" }, "·"), /* @__PURE__ */ React.createElement(
+      ), /* @__PURE__ */ React.createElement("span", { className: "mx-2.5 text-muted-foreground" }, "·"), /* @__PURE__ */ React.createElement(
         "a",
         {
           href: stripeDashboardUrl(mode, "/billing/meters"),

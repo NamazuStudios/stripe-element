@@ -246,7 +246,7 @@ export function StripeCustomersPlugin() {
                       >
                         Dashboard
                       </a>
-                      <span className="mx-1 text-muted-foreground">·</span>
+                      <span className="mx-2.5 text-muted-foreground">·</span>
                       <a
                         href={stripeDashboardUrl(mode, '/billing/meters')}
                         target="_blank"
