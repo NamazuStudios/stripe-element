@@ -25,6 +25,10 @@ function displayName(c: CustomerSummary): string {
   return c.name || c.metadata['orgName'] || c.metadata['name'] || c.email || '—'
 }
 
+// Concurrent customers being usage-summed for the "with usage only" filter. Meters within one
+// customer still fan out in parallel; this bounds the customer-level concurrency.
+const USAGE_FILTER_CONCURRENCY = 5
+
 export function StripeCustomersPlugin() {
   const limit = defaultLimit()
   const [mode, setMode] = React.useState<Mode>('production')
@@ -83,28 +87,46 @@ export function StripeCustomersPlugin() {
   React.useEffect(() => { fetchCustomers(mode, null, []) }, [mode])
 
   // Resolve the "with usage only" filter whenever it or the window changes, and whenever the
-  // customer page changes.
+  // customer page changes. Each customer costs one request per meter; they are processed
+  // through a small worker pool (rather than one giant parallel blast) so we don't exhaust the
+  // browser's per-host connection limit or trip Stripe's rate limits. Totals land
+  // progressively as workers finish.
   React.useEffect(() => {
-    if (!usageOnly || !customers?.length) return
+    if (!usageOnly || !customers?.length || meters.length === 0) return
     let cancelled = false
-    async function run() {
-      const headers = { ...sessionHeaders(), 'X-Stripe-Mode': mode }
-      await Promise.all((customers ?? []).map(async c => {
+    const headers = { ...sessionHeaders(), 'X-Stripe-Mode': mode }
+    const queue = [...customers]
+
+    async function totalFor(c: CustomerSummary): Promise<number> {
+      const results = await Promise.all(meters.map(m => fetch(
+        `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams(usageWindowDays)}`,
+        { credentials: 'include', headers })))
+      let total = 0
+      for (const res of results) {
+        if (!res.ok) {
+          console.warn(`usage query for ${c.id} failed: ${res.status}`)
+          continue
+        }
+        total += sumUsage(await res.json())
+      }
+      return total
+    }
+
+    async function worker() {
+      while (!cancelled) {
+        const c = queue.shift()
+        if (!c) return
         try {
-          let total = 0
-          const results = await Promise.all(meters.map(m => fetch(
-            `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams(usageWindowDays)}`,
-            { credentials: 'include', headers })))
-          for (const res of results) {
-            if (res.ok) total += sumUsage(await res.json())
-          }
+          const total = await totalFor(c)
           if (!cancelled) setUsageTotals(prev => ({ ...prev, [c.id]: total }))
         } catch {
           if (!cancelled) setUsageTotals(prev => ({ ...prev, [c.id]: null }))
         }
-      }))
+      }
     }
-    run()
+
+    const workers = Array.from({ length: Math.min(USAGE_FILTER_CONCURRENCY, queue.length) }, worker)
+    Promise.all(workers).catch(() => { /* per-customer errors already handled */ })
     return () => { cancelled = true }
   }, [usageOnly, usageWindowDays, customers, meters, mode])
 
@@ -177,8 +199,10 @@ export function StripeCustomersPlugin() {
               onChange={e => setUsageOnly(e.target.checked)}
               className="accent-primary"
             />
-            {usageOnly && Object.keys(usageTotals).length > 0 && usageFilterSettled
-              ? `With usage only (${filteredCustomers.length})`
+            {usageOnly
+              ? usageFilterSettled
+                ? `With usage only (${filteredCustomers.length})`
+                : `With usage only — summing ${Object.keys(usageTotals).length}/${customers?.length ?? 0}…`
               : 'With usage only'}
           </label>
         </div>

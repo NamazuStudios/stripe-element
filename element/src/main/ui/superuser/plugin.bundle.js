@@ -330,6 +330,7 @@
   function displayName(c) {
     return c.name || c.metadata["orgName"] || c.metadata["name"] || c.email || "—";
   }
+  const USAGE_FILTER_CONCURRENCY = 5;
   function StripeCustomersPlugin() {
     const limit = defaultLimit();
     const [mode, setMode] = React.useState("production");
@@ -377,27 +378,40 @@
       fetchCustomers(mode, null, []);
     }, [mode]);
     React.useEffect(() => {
-      if (!usageOnly || !(customers == null ? void 0 : customers.length)) return;
+      if (!usageOnly || !(customers == null ? void 0 : customers.length) || meters.length === 0) return;
       let cancelled = false;
-      async function run() {
-        const headers = { ...sessionHeaders(), "X-Stripe-Mode": mode };
-        await Promise.all((customers ?? []).map(async (c) => {
+      const headers = { ...sessionHeaders(), "X-Stripe-Mode": mode };
+      const queue = [...customers];
+      async function totalFor(c) {
+        const results = await Promise.all(meters.map((m) => fetch(
+          `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams(usageWindowDays)}`,
+          { credentials: "include", headers }
+        )));
+        let total = 0;
+        for (const res of results) {
+          if (!res.ok) {
+            console.warn(`usage query for ${c.id} failed: ${res.status}`);
+            continue;
+          }
+          total += sumUsage(await res.json());
+        }
+        return total;
+      }
+      async function worker() {
+        while (!cancelled) {
+          const c = queue.shift();
+          if (!c) return;
           try {
-            let total = 0;
-            const results = await Promise.all(meters.map((m) => fetch(
-              `/element/stripe/api/stripe/meters/usage?event=${encodeURIComponent(m.eventName)}&customer=${encodeURIComponent(c.id)}${usageRangeParams(usageWindowDays)}`,
-              { credentials: "include", headers }
-            )));
-            for (const res of results) {
-              if (res.ok) total += sumUsage(await res.json());
-            }
+            const total = await totalFor(c);
             if (!cancelled) setUsageTotals((prev) => ({ ...prev, [c.id]: total }));
           } catch {
             if (!cancelled) setUsageTotals((prev) => ({ ...prev, [c.id]: null }));
           }
-        }));
+        }
       }
-      run();
+      const workers = Array.from({ length: Math.min(USAGE_FILTER_CONCURRENCY, queue.length) }, worker);
+      Promise.all(workers).catch(() => {
+      });
       return () => {
         cancelled = true;
       };
@@ -448,7 +462,7 @@
         onChange: (e) => setUsageOnly(e.target.checked),
         className: "accent-primary"
       }
-    ), usageOnly && Object.keys(usageTotals).length > 0 && usageFilterSettled ? `With usage only (${filteredCustomers.length})` : "With usage only")), usageOnly && /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { htmlFor: "customers-usage-window", className: "block text-sm font-medium" }, "Usage window"), /* @__PURE__ */ React.createElement(
+    ), usageOnly ? usageFilterSettled ? `With usage only (${filteredCustomers.length})` : `With usage only — summing ${Object.keys(usageTotals).length}/${(customers == null ? void 0 : customers.length) ?? 0}…` : "With usage only")), usageOnly && /* @__PURE__ */ React.createElement("div", { className: "space-y-1.5" }, /* @__PURE__ */ React.createElement("label", { htmlFor: "customers-usage-window", className: "block text-sm font-medium" }, "Usage window"), /* @__PURE__ */ React.createElement(
       "select",
       {
         id: "customers-usage-window",
