@@ -4,6 +4,7 @@ import dev.getelements.elements.stripe.dao.StripeConfigDao;
 import dev.getelements.elements.stripe.model.StripeConfig;
 import dev.getelements.elements.stripe.model.StripeConfigDocument;
 import dev.getelements.elements.stripe.model.StripeMode;
+import jakarta.ws.rs.InternalServerErrorException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,9 +16,14 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * The database document is the single source of truth — there are no attribute fallbacks. A mode
+ * with no persisted credentials is unconfigured and refuses to serve a key.
+ */
 @ExtendWith(MockitoExtension.class)
 class StripeConfigServiceImplTest {
 
@@ -27,22 +33,19 @@ class StripeConfigServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new StripeConfigServiceImpl(
-                configDao,
-                "sk_live_default", "whsec_live_default",
-                "sk_test_default", "whsec_test_default");
+        service = new StripeConfigServiceImpl(configDao);
     }
 
     @Test
-    void getConfig_mode_noDocument_returnsAttributeDefaults() {
+    void getConfig_mode_noDocument_throwsUnconfigured() {
         when(configDao.findConfig()).thenReturn(Optional.empty());
 
-        assertEquals(new StripeConfig("sk_live_default", "whsec_live_default"), service.getConfig(StripeMode.PRODUCTION));
-        assertEquals(new StripeConfig("sk_test_default", "whsec_test_default"), service.getConfig(StripeMode.SANDBOX));
+        assertThrows(InternalServerErrorException.class, () -> service.getConfig(StripeMode.PRODUCTION));
+        assertThrows(InternalServerErrorException.class, () -> service.getConfig(StripeMode.SANDBOX));
     }
 
     @Test
-    void getConfig_mode_dbValuePresent_overridesAttributeDefault() {
+    void getConfig_mode_dbValuePresent_returnsIt() {
         final var doc = new StripeConfigDocument();
         doc.setApiKey("sk_live_db");
         doc.setWebhookSecret("whsec_live_db");
@@ -52,7 +55,7 @@ class StripeConfigServiceImplTest {
     }
 
     @Test
-    void getConfig_mode_perFieldFallback_blankDbFieldFallsBackIndependently() {
+    void getConfig_mode_blankDbField_throwsUnconfigured() {
         final var doc = new StripeConfigDocument();
         doc.setApiKey("sk_live_db");
         doc.setWebhookSecret("");
@@ -60,7 +63,7 @@ class StripeConfigServiceImplTest {
 
         final var config = service.getConfig(StripeMode.PRODUCTION);
         assertEquals("sk_live_db", config.apiKey());
-        assertEquals("whsec_live_default", config.webhookSecret());
+        assertEquals("", config.webhookSecret()); // raw: blank string passes through verbatim
     }
 
     @Test
@@ -77,7 +80,7 @@ class StripeConfigServiceImplTest {
     }
 
     @Test
-    void getRawConfig_noAttributeFallback_returnsNullWhenUnset() {
+    void getRawConfig_noDocument_returnsNulls() {
         when(configDao.findConfig()).thenReturn(Optional.empty());
 
         final var raw = service.getRawConfig(StripeMode.SANDBOX);
@@ -86,25 +89,38 @@ class StripeConfigServiceImplTest {
     }
 
     @Test
+    void getRawConfig_returnsUnresolvedValues() {
+        final var doc = new StripeConfigDocument();
+        doc.setSandboxApiKey("sk_test_db");
+        when(configDao.findConfig()).thenReturn(Optional.of(doc));
+
+        assertEquals(new StripeConfig("sk_test_db", null), service.getRawConfig(StripeMode.SANDBOX));
+        assertNull(service.getRawConfig(StripeMode.PRODUCTION).apiKey());
+    }
+
+    @Test
     void resolveDefaultMode_productionConfigured_returnsProduction() {
-        when(configDao.findConfig()).thenReturn(Optional.empty());
+        final var doc = new StripeConfigDocument();
+        doc.setApiKey("sk_live_db");
+        when(configDao.findConfig()).thenReturn(Optional.of(doc));
+
         assertEquals(StripeMode.PRODUCTION, service.resolveDefaultMode());
     }
 
     @Test
     void resolveDefaultMode_productionNotConfigured_returnsSandbox() {
-        final var service = new StripeConfigServiceImpl(configDao, "", "", "sk_test_default", "whsec_test_default");
         when(configDao.findConfig()).thenReturn(Optional.empty());
 
         assertEquals(StripeMode.SANDBOX, service.resolveDefaultMode());
     }
 
     @Test
-    void getConfig_noArg_delegatesToResolvedDefaultMode() {
-        final var service = new StripeConfigServiceImpl(configDao, "", "", "sk_test_default", "whsec_test_default");
-        when(configDao.findConfig()).thenReturn(Optional.empty());
+    void getConfig_noArg_delegatesToDefaultMode() {
+        final var doc = new StripeConfigDocument();
+        doc.setSandboxApiKey("sk_test_db");
+        when(configDao.findConfig()).thenReturn(Optional.of(doc));
 
-        assertEquals(new StripeConfig("sk_test_default", "whsec_test_default"), service.getConfig());
+        assertEquals(new StripeConfig("sk_test_db", null), service.getConfig());
     }
 
     @Test
@@ -119,6 +135,7 @@ class StripeConfigServiceImplTest {
 
         final var captor = ArgumentCaptor.forClass(StripeConfigDocument.class);
         verify(configDao).saveConfig(captor.capture());
+
         final var saved = captor.getValue();
         assertEquals("sk_live_new", saved.getApiKey());
         assertEquals("whsec_live_new", saved.getWebhookSecret());
@@ -127,15 +144,16 @@ class StripeConfigServiceImplTest {
     }
 
     @Test
-    void saveConfig_legacyNoModeArg_writesProductionFields() {
-        when(configDao.findConfig()).thenReturn(Optional.empty());
+    void saveConfig_emptyString_clearsField() {
+        final var existing = new StripeConfigDocument();
+        existing.setApiKey("sk_live_old");
+        when(configDao.findConfig()).thenReturn(Optional.of(existing));
 
-        service.saveConfig(new StripeConfig("sk_live_new", "whsec_live_new"));
+        service.saveConfig(new StripeConfig("", "whsec_live_new"), StripeMode.PRODUCTION);
 
         final var captor = ArgumentCaptor.forClass(StripeConfigDocument.class);
         verify(configDao).saveConfig(captor.capture());
-        assertEquals("sk_live_new", captor.getValue().getApiKey());
-        assertNull(captor.getValue().getSandboxApiKey());
+        assertEquals("", captor.getValue().getApiKey());
     }
 
 }

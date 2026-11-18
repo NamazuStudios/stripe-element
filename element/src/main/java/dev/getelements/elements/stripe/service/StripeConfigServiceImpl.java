@@ -1,35 +1,29 @@
 package dev.getelements.elements.stripe.service;
 
 import com.google.inject.Inject;
-import dev.getelements.elements.sdk.annotation.ElementServiceExport;
-import dev.getelements.elements.stripe.StripeApplication;
 import dev.getelements.elements.stripe.dao.StripeConfigDao;
 import dev.getelements.elements.stripe.model.StripeConfig;
 import dev.getelements.elements.stripe.model.StripeConfigDocument;
 import dev.getelements.elements.stripe.model.StripeMode;
-import jakarta.inject.Named;
 
-@ElementServiceExport(StripeConfigService.class)
+/**
+ * Stripe credential configuration. The database document (managed through the Configuration
+ * UI / {@code /stripe/config} endpoint) is the <strong>single source of truth</strong> — there
+ * are no attribute-based fallbacks. A mode with no persisted key is unconfigured: API calls for
+ * it fail with a clear error until credentials are saved.
+ *
+ * <p>Historical note: these credentials were once resolvable from Element attributes as a
+ * fallback layer. That dual-source resolution let a displayed fallback get persisted back into
+ * the database through the config round-trip (one mode's key silently overwriting the other's),
+ * so the attribute layer was removed.
+ */
 public class StripeConfigServiceImpl implements StripeConfigService {
 
     private final StripeConfigDao configDao;
-    private final String defaultApiKey;
-    private final String defaultWebhookSecret;
-    private final String defaultSandboxApiKey;
-    private final String defaultSandboxWebhookSecret;
 
     @Inject
-    public StripeConfigServiceImpl(
-            StripeConfigDao configDao,
-            @Named(StripeApplication.STRIPE_API_KEY) String defaultApiKey,
-            @Named(StripeApplication.STRIPE_WEBHOOK_SECRET) String defaultWebhookSecret,
-            @Named(StripeApplication.STRIPE_SANDBOX_API_KEY) String defaultSandboxApiKey,
-            @Named(StripeApplication.STRIPE_SANDBOX_WEBHOOK_SECRET) String defaultSandboxWebhookSecret) {
+    public StripeConfigServiceImpl(StripeConfigDao configDao) {
         this.configDao = configDao;
-        this.defaultApiKey = defaultApiKey;
-        this.defaultWebhookSecret = defaultWebhookSecret;
-        this.defaultSandboxApiKey = defaultSandboxApiKey;
-        this.defaultSandboxWebhookSecret = defaultSandboxWebhookSecret;
     }
 
     @Override
@@ -39,12 +33,15 @@ public class StripeConfigServiceImpl implements StripeConfigService {
 
     @Override
     public StripeConfig getConfig(StripeMode mode) {
+
         final var raw = getRawConfig(mode);
-        final var defaultApiKeyForMode = mode == StripeMode.SANDBOX ? defaultSandboxApiKey : defaultApiKey;
-        final var defaultSecretForMode = mode == StripeMode.SANDBOX ? defaultSandboxWebhookSecret : defaultWebhookSecret;
-        final var apiKey = configured(raw.apiKey()) ? raw.apiKey() : defaultApiKeyForMode;
-        final var secret = configured(raw.webhookSecret()) ? raw.webhookSecret() : defaultSecretForMode;
-        return new StripeConfig(apiKey, secret);
+
+        if (!configured(raw.apiKey())) {
+            throw new jakarta.ws.rs.InternalServerErrorException(
+                    "Stripe API key not configured for mode " + mode + " — save credentials in the Configuration tab");
+        }
+
+        return raw;
     }
 
     @Override
@@ -58,7 +55,7 @@ public class StripeConfigServiceImpl implements StripeConfigService {
 
     @Override
     public StripeMode resolveDefaultMode() {
-        return configured(getConfig(StripeMode.PRODUCTION).apiKey()) ? StripeMode.PRODUCTION : StripeMode.SANDBOX;
+        return configured(getRawConfig(StripeMode.PRODUCTION).apiKey()) ? StripeMode.PRODUCTION : StripeMode.SANDBOX;
     }
 
     @Override

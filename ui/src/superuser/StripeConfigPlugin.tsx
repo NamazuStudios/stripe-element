@@ -83,8 +83,8 @@ function ConfigFields({
       <SecretField
         label="API Key"
         hint={config.apiKey
-          ? 'Persisted in the database; overrides the Element attribute default.'
-          : 'Empty — the Element attribute default (dev.getelements.elements.stripe.api.key*) is in effect.'}
+          ? 'Persisted in the database.'
+          : 'Not configured — API calls in this mode will fail until a key is saved.'}
         placeholder={apiKeyPlaceholder}
         value={config.apiKey}
         onChange={apiKey => onChange({ ...config, apiKey })}
@@ -94,11 +94,12 @@ function ConfigFields({
         label="Webhook Signing Secret"
         hint={
           config.webhookSecret ? (
-            'Persisted in the database; overrides the Element attribute default.'
+            'Persisted in the database.'
           ) : (
             <>
-              Empty — the Element attribute default applies. Found in the Stripe Dashboard under
-              Developers &rarr; Webhooks. Must use the Account (not v2) webhook type.
+              Not configured — webhook signature verification will fail until saved. Found in the
+              Stripe Dashboard under Developers &rarr; Webhooks. Must use the Account (not v2)
+              webhook type.
             </>
           )
         }
@@ -169,8 +170,8 @@ export function StripeConfigPlugin() {
     <div className="p-6 max-w-lg">
       <h1 className="text-2xl font-bold mb-1">Stripe Configuration</h1>
       <p className="text-sm text-muted-foreground mb-6">
-        Credentials are stored in the database and override the Element&rsquo;s default
-        attributes. Values are hidden by default; use Show to reveal them. Both sets of
+        Credentials are stored in the database and are the single source of truth for this
+        deployment. Values are hidden by default; use Show to reveal them. Both sets of
         credentials can be configured at once and selected per request via the header:
         <code>X-Stripe-Mode: (production/sandbox)</code>{' '}
         Requests that omit the header use production if configured, sandbox otherwise.

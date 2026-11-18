@@ -60,7 +60,7 @@
       SecretField,
       {
         label: "API Key",
-        hint: config.apiKey ? "Persisted in the database; overrides the Element attribute default." : "Empty — the Element attribute default (dev.getelements.elements.stripe.api.key*) is in effect.",
+        hint: config.apiKey ? "Persisted in the database." : "Not configured — API calls in this mode will fail until a key is saved.",
         placeholder: apiKeyPlaceholder,
         value: config.apiKey,
         onChange: (apiKey) => onChange({ ...config, apiKey })
@@ -69,7 +69,7 @@
       SecretField,
       {
         label: "Webhook Signing Secret",
-        hint: config.webhookSecret ? "Persisted in the database; overrides the Element attribute default." : /* @__PURE__ */ React.createElement(React.Fragment, null, "Empty — the Element attribute default applies. Found in the Stripe Dashboard under Developers → Webhooks. Must use the Account (not v2) webhook type."),
+        hint: config.webhookSecret ? "Persisted in the database." : /* @__PURE__ */ React.createElement(React.Fragment, null, "Not configured — webhook signature verification will fail until saved. Found in the Stripe Dashboard under Developers → Webhooks. Must use the Account (not v2) webhook type."),
         placeholder: "whsec_…",
         value: config.webhookSecret,
         onChange: (webhookSecret) => onChange({ ...config, webhookSecret })
@@ -123,7 +123,7 @@
     if (loading) {
       return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground" }, "Loading configuration…"));
     }
-    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and override the Element’s default attributes. Values are hidden by default; use Show to reveal them. Both sets of credentials can be configured at once and selected per request via the header:", /* @__PURE__ */ React.createElement("code", null, "X-Stripe-Mode: (production/sandbox)"), " ", "Requests that omit the header use production if configured, sandbox otherwise."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-6" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-border" }, /* @__PURE__ */ React.createElement("nav", { className: "flex gap-1", "aria-label": "Stripe mode tabs" }, MODE_TABS.map((tab) => /* @__PURE__ */ React.createElement(
+    return /* @__PURE__ */ React.createElement("div", { className: "p-6 max-w-lg" }, /* @__PURE__ */ React.createElement("h1", { className: "text-2xl font-bold mb-1" }, "Stripe Configuration"), /* @__PURE__ */ React.createElement("p", { className: "text-sm text-muted-foreground mb-6" }, "Credentials are stored in the database and are the single source of truth for this deployment. Values are hidden by default; use Show to reveal them. Both sets of credentials can be configured at once and selected per request via the header:", /* @__PURE__ */ React.createElement("code", null, "X-Stripe-Mode: (production/sandbox)"), " ", "Requests that omit the header use production if configured, sandbox otherwise."), /* @__PURE__ */ React.createElement("form", { onSubmit: handleSave, className: "space-y-6" }, /* @__PURE__ */ React.createElement("div", { className: "border-b border-border" }, /* @__PURE__ */ React.createElement("nav", { className: "flex gap-1", "aria-label": "Stripe mode tabs" }, MODE_TABS.map((tab) => /* @__PURE__ */ React.createElement(
       "button",
       {
         key: tab.id,

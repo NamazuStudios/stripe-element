@@ -28,24 +28,24 @@ mvn -pl debug exec:java
 
 ## Configuration
 
+Stripe credentials are configured through the **Configuration** tab of the dashboard plugin
+(`PUT /element/stripe/api/stripe/config`), which persists them to the database — the single
+source of truth. There are no attribute-based fallbacks for credentials: a mode with no saved
+key is unconfigured, and API calls for it fail until credentials are saved.
+
 | Attribute key | Description | Default |
 |---|---|---|
-| `dev.getelements.elements.stripe.api.key` | Stripe secret API key (`sk_live_...` or `sk_test_...`) | *(empty)* |
-| `dev.getelements.elements.stripe.webhook.secret` | Stripe webhook signing secret (`whsec_...`) | *(empty)* |
 | `dev.getelements.elements.element.rs.root` | REST API root path | `/element/stripe/api` |
 | `dev.getelements.elements.auth.enabled` | Enable Elements session auth filter | `true` |
+| `dev.getelements.elements.stripe.price.cache.ttl.ms` | Price catalogue cache TTL | `300000` |
 
-**Deployed instances** — set attributes via the admin panel under **Element Management**. Select the deployment and edit its attributes directly; no rebuild is required.
+**Deployed instances** — set the non-credential attributes via the admin panel under **Element Management**; no rebuild is required.
 
-**Local development** — set attributes in `run.java` before the element loads, or pass them as system properties on the command line:
+**Local development** — start the harness and enter keys once in the **Configuration** tab (they persist in the local MongoDB):
 
 ```bash
-mvn -pl debug exec:java \
-  -Ddev.getelements.elements.stripe.api.key=sk_test_YOUR_KEY \
-  -Ddev.getelements.elements.stripe.webhook.secret=whsec_YOUR_SECRET
+mvn -pl debug exec:java
 ```
-
-Defaults can also be baked into `element/src/main/elm/dev.getelements.element.attributes.properties` and will be packaged into the `.elm` archive, but these are overridden by anything set at the deployment level.
 
 ---
 
