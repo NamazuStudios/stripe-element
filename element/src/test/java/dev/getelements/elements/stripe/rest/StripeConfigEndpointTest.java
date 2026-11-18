@@ -36,17 +36,22 @@ class StripeConfigEndpointTest {
         endpoint = new StripeConfigEndpoint(configService);
     }
 
-    // --- GET (plaintext) ---
+    // --- GET (raw persisted values) ---
 
     @Test
-    void getConfig_returnsEffectiveConfigIncludingAttributeFallback() {
-        when(configService.getConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_prodKeyAb", "whsec_prodSecret12"));
-        when(configService.getConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_testKeyCd", "whsec_testSecret34"));
+    void getConfig_returnsRawPersistedValuesWithoutAttributeFallback() {
+        // Raw — NOT resolved. The resolved config falls back to the Element attribute defaults;
+        // round-tripping those through the UI's save-both-sections PUT would persist the fallback
+        // into the database, shadowing the attribute default permanently (the "production key
+        // keeps getting overwritten by the sandbox key" bug).
+        when(configService.getRawConfig(StripeMode.PRODUCTION)).thenReturn(new StripeConfig("sk_live_prodKeyAb", "whsec_prodSecret12"));
+        when(configService.getRawConfig(StripeMode.SANDBOX)).thenReturn(new StripeConfig("sk_test_testKeyCd", "whsec_testSecret34"));
 
         final var result = endpoint.getConfig();
 
         assertEquals(new StripeConfig("sk_live_prodKeyAb", "whsec_prodSecret12"), result.production());
         assertEquals(new StripeConfig("sk_test_testKeyCd", "whsec_testSecret34"), result.sandbox());
+        verify(configService, never()).getConfig(any());
     }
 
     // --- PUT (verbatim persistence) ---

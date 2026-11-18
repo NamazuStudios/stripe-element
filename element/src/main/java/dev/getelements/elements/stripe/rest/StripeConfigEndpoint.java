@@ -40,12 +40,17 @@ public class StripeConfigEndpoint {
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(
             summary = "Get Stripe configuration",
-            description = "Returns the current production and sandbox Stripe credentials with plaintext values. " +
-                    "Confidentiality is the client's responsibility: the UI renders these fields as password " +
-                    "inputs (masking and optionally revealing client-side)."
+            description = "Returns the production and sandbox Stripe credentials as persisted in the database — " +
+                    "empty fields mean the Element's attribute default is in effect. Confidentiality is the client's " +
+                    "responsibility: the UI renders these fields as password inputs (masking and optionally " +
+                    "revealing client-side)."
     )
     public StripeDualConfig getConfig() {
-        return new StripeDualConfig(configService.getConfig(StripeMode.PRODUCTION), configService.getConfig(StripeMode.SANDBOX));
+        // Raw, not resolved: the resolved config falls back to the Element's attribute defaults,
+        // and round-tripping those through the UI would persist them into the database on the
+        // next save — shadowing the attribute default and making a fallback look like a
+        // persisted key that "keeps overwriting" the real one.
+        return new StripeDualConfig(configService.getRawConfig(StripeMode.PRODUCTION), configService.getRawConfig(StripeMode.SANDBOX));
     }
 
     @PUT

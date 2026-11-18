@@ -82,7 +82,9 @@ function ConfigFields({
 
       <SecretField
         label="API Key"
-        hint="The Stripe secret key used for PaymentIntent and Subscription API calls."
+        hint={config.apiKey
+          ? 'Persisted in the database; overrides the Element attribute default.'
+          : 'Empty — the Element attribute default (dev.getelements.elements.stripe.api.key*) is in effect.'}
         placeholder={apiKeyPlaceholder}
         value={config.apiKey}
         onChange={apiKey => onChange({ ...config, apiKey })}
@@ -91,10 +93,14 @@ function ConfigFields({
       <SecretField
         label="Webhook Signing Secret"
         hint={
-          <>
-            Found in the Stripe Dashboard under Developers &rarr; Webhooks. Must use the
-            Account (not v2) webhook type.
-          </>
+          config.webhookSecret ? (
+            'Persisted in the database; overrides the Element attribute default.'
+          ) : (
+            <>
+              Empty — the Element attribute default applies. Found in the Stripe Dashboard under
+              Developers &rarr; Webhooks. Must use the Account (not v2) webhook type.
+            </>
+          )
         }
         placeholder="whsec_…"
         value={config.webhookSecret}
