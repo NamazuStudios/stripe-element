@@ -1,6 +1,7 @@
 package dev.getelements.elements.stripe.service;
 
 import com.google.inject.Inject;
+import dev.getelements.elements.sdk.annotation.ElementServiceExport;
 import dev.getelements.elements.stripe.dao.StripeConfigDao;
 import dev.getelements.elements.stripe.model.StripeConfig;
 import dev.getelements.elements.stripe.model.StripeConfigDocument;
@@ -17,6 +18,7 @@ import dev.getelements.elements.stripe.model.StripeMode;
  * the database through the config round-trip (one mode's key silently overwriting the other's),
  * so the attribute layer was removed.
  */
+@ElementServiceExport(StripeConfigService.class)
 public class StripeConfigServiceImpl implements StripeConfigService {
 
     private final StripeConfigDao configDao;
